@@ -1,0 +1,6 @@
+{
+  "name": "Sports Store",
+  "description": "An interactive sports equipment e-commerce store with product search, light/dark modes, admin management dashboard, geolocation delivery tracking, and automatic WhatsApp invoice generation.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
