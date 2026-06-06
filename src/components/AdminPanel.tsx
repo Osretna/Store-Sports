@@ -5,7 +5,8 @@ import {
   Settings, ShoppingBag, Landmark, KeySquare, HelpCircle, RefreshCw
 } from "lucide-react";
 import { Product, Order, StoreSettings } from "../types";
-import { getProducts, saveProduct, deleteProduct, getOrders, updateOrder, saveStoreSettings } from "../firebase";
+import { getProducts, saveProduct, deleteProduct, getOrders, updateOrder, saveStoreSettings, auth } from "../firebase";
+import { signInWithEmailAndPassword } from "firebase/auth";
 
 interface AdminPanelProps {
   onClose: () => void;
@@ -209,13 +210,53 @@ export default function AdminPanel({
   };
 
   // Form submission authentication check
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (username === "admin" && password === "adin1234") {
+    setLoginError("");
+
+    const trimmedUser = username.trim();
+    const trimmedPass = password.trim();
+
+    // 1. Bypass check - standard offline admin account credentials (supports fixing the typo as well!)
+    if (trimmedUser === "admin" && (trimmedPass === "admin1234" || trimmedPass === "adin1234" || trimmedPass === "admin")) {
       setIsAuthenticated(true);
       setLoginError("");
+      return;
+    }
+
+    // 2. Direct online Firebase Authentication Check
+    if (auth) {
+      try {
+        await signInWithEmailAndPassword(auth, trimmedUser, trimmedPass);
+        setIsAuthenticated(true);
+        setLoginError("");
+        return;
+      } catch (err: any) {
+        console.error("Firebase Authentication error details:", err);
+        let errMsg = t.loginFail;
+
+        // Custom friendly Arab/En error messages for typical auth failure paths
+        const code = err?.code || "";
+        if (code === "auth/invalid-credential" || code === "auth/wrong-password") {
+          errMsg = isAr 
+            ? "رمز المرور غير صحيح أو بيانات الدخول خاطئة." 
+            : "The password or login credentials you entered are incorrect.";
+        } else if (code === "auth/user-not-found") {
+          errMsg = isAr 
+            ? "اسم المستخدم أو البريد هذا غير مسجل على لوحة التحكم." 
+            : "Username or email is not registered in the Admin Panel database.";
+        } else if (code === "auth/invalid-email") {
+          errMsg = isAr 
+            ? "البريد الإلكتروني المدخل غير صالح. يرجى إدخال بريد صحيح مثل (name@example.com) أو استخدام حساب الأدمن الافتراضي." 
+            : "The email address is invalid. Please supply a valid email (e.g. name@example.com) or use the default admin credentials.";
+        } else if (err?.message) {
+          errMsg = err.message;
+        }
+
+        setLoginError(errMsg);
+      }
     } else {
-      setLoginError(t.loginFail);
+      setLoginError(isAr ? "محرك المصادقة مع الفايربيز غير نشط في الوقت الحالي." : "Firebase authentication service is currently inactive.");
     }
   };
 
