@@ -56,7 +56,7 @@ export default function Header({
           {/* Real-time Track Order button */}
           <button
             onClick={onOpenTracking}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-500/20 dark:border-emerald-500/30 bg-emerald-500/10 text-xs font-extrabold text-emerald-750 dark:text-emerald-400 hover:bg-emerald-500/20 active:scale-95 transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-500/20 dark:border-emerald-500/30 bg-emerald-500/10 text-xs font-extrabold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/20 active:scale-95 transition-all cursor-pointer"
           >
             <Truck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 animate-pulse" />
             <span>

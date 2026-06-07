@@ -691,7 +691,12 @@ export default function App() {
                     <div className="text-zinc-400 font-medium">
                       {isAr ? "الأدوات المطلوبة:" : "Gym Equipment:"}{" "}
                       <span className="text-emerald-500 dark:text-emerald-400 font-extrabold">
-                        {trackedOrder.items.map((it) => `${isAr ? it.productNameAr : it.productNameEn} (x${it.quantity})`).join(", ")}
+                        {trackedOrder.items.map((it: any) => {
+                          const name = isAr 
+                            ? (it.productNameAr || (it.product && it.product.nameAr) || "") 
+                            : (it.productNameEn || (it.product && it.product.nameEn) || "");
+                          return `${name} (x${it.quantity})`;
+                        }).join(", ")}
                       </span>
                     </div>
                     {trackedOrder.customerCoords && (
@@ -1455,7 +1460,7 @@ export default function App() {
                 </div>
 
                 {/* MAP GPS DISPATCH NAVIGATION LINK */}
-                {trackedOrder.customerLat && trackedOrder.customerLng && (
+                {trackedOrder.customerCoords?.lat && trackedOrder.customerCoords?.lng && (
                   <div className="bg-emerald-500/5 dark:bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/10 space-y-2.5 text-right rtl:text-right">
                     <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-extrabold text-[11px]">
                       <MapPin className="w-4 h-4 text-emerald-500 shadow-sm animate-bounce" />
@@ -1468,7 +1473,7 @@ export default function App() {
                       }
                     </p>
                     <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${trackedOrder.customerLat},${trackedOrder.customerLng}`}
+                      href={`https://www.google.com/maps/search/?api=1&query=${trackedOrder.customerCoords.lat},${trackedOrder.customerCoords.lng}`}
                       target="_blank"
                       rel="noreferrer"
                       className="inline-flex items-center gap-1.5 font-black text-emerald-600 dark:text-emerald-400 hover:underline mt-1 cursor-pointer"
@@ -1483,16 +1488,22 @@ export default function App() {
                 <div className="bg-zinc-100/60 dark:bg-zinc-950/40 p-3 rounded-xl space-y-2">
                   <span className="text-[10px] font-black block text-zinc-400">{isAr ? "محتويات شحنة المستلزمات والوزن الكلي:" : "Package gears content & details:"}</span>
                   <div className="space-y-1">
-                    {trackedOrder.items.map((item: any, idx: number) => (
-                      <div key={idx} className="flex justify-between items-center text-[11px] font-semibold">
-                        <span>• {language === "ar" ? item.product.nameAr : item.product.nameEn} <span className="text-zinc-400 font-normal">({item.quantity} {isAr ? "حبة" : "unit"})</span></span>
-                        <span className="font-mono text-zinc-500 dark:text-zinc-400">{item.product.price * item.quantity} {isAr ? "ج.م" : "EGP"}</span>
-                      </div>
-                    ))}
+                    {trackedOrder.items.map((item: any, idx: number) => {
+                      const name = language === "ar" 
+                        ? (item.productNameAr || (item.product && item.product.nameAr) || "") 
+                        : (item.productNameEn || (item.product && item.product.nameEn) || "");
+                      const price = item.price != null ? item.price : (item.product && item.product.price) || 0;
+                      return (
+                        <div key={idx} className="flex justify-between items-center text-[11px] font-semibold">
+                          <span>• {name} <span className="text-zinc-400 font-normal">({item.quantity} {isAr ? "حبة" : "unit"})</span></span>
+                          <span className="font-mono text-zinc-500 dark:text-zinc-400">{price * item.quantity} {isAr ? "ج.م" : "EGP"}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                   <div className="pt-2 border-t border-zinc-200/50 dark:border-zinc-800 flex justify-between font-black text-[11px] text-zinc-900 dark:text-white">
                     <span>{isAr ? "المجموع الكلي للفاتورة:" : "Grand Total:"}</span>
-                    <span>{trackedOrder.total} {isAr ? "جنيه مصري" : "EGP"}</span>
+                    <span>{trackedOrder.totalPrice} {isAr ? "جنيه مصري" : "EGP"}</span>
                   </div>
                 </div>
 

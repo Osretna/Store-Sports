@@ -380,14 +380,20 @@ export default function AdminPanel({
               </tr>
             </thead>
             <tbody>
-              ${order.items.map(item => `
-                <tr>
-                  <td>${isAr ? item.productNameAr : item.productNameEn}</td>
-                  <td>${item.quantity}</td>
-                  <td>${item.price} ${isAr ? "ج.م" : "EGP"}</td>
-                  <td>${item.price * item.quantity} ${isAr ? "ج.م" : "EGP"}</td>
-                </tr>
-              `).join("")}
+              ${order.items.map((item: any) => {
+                const name = isAr 
+                  ? (item.productNameAr || (item.product && item.product.nameAr) || "") 
+                  : (item.productNameEn || (item.product && item.product.nameEn) || "");
+                const price = item.price != null ? item.price : (item.product && item.product.price) || 0;
+                return `
+                  <tr>
+                    <td>${name}</td>
+                    <td>${item.quantity}</td>
+                    <td>${price} ${isAr ? "ج.م" : "EGP"}</td>
+                    <td>${price * item.quantity} ${isAr ? "ج.م" : "EGP"}</td>
+                  </tr>
+                `;
+              }).join("")}
             </tbody>
           </table>
           <div class="total">
@@ -961,14 +967,20 @@ export default function AdminPanel({
                                   {t.orders.itemsOrdered}
                                 </div>
                                 <div className="space-y-2 divide-y divide-zinc-100 dark:divide-zinc-900">
-                                  {selectedOrder.items.map((it, idx) => (
-                                    <div key={idx} className="flex items-center justify-between text-xs pt-2 first:pt-0">
-                                      <span className="font-bold text-zinc-800 dark:text-zinc-200">
-                                        {isAr ? it.productNameAr : it.productNameEn} <span className="text-zinc-400">(x{it.quantity})</span>
-                                      </span>
-                                      <span className="font-mono text-zinc-500">{it.price * it.quantity} {isAr ? "ج.م" : "EGP"}</span>
-                                    </div>
-                                  ))}
+                                  {selectedOrder.items.map((it: any, idx) => {
+                                    const name = isAr 
+                                      ? (it.productNameAr || (it.product && it.product.nameAr) || "") 
+                                      : (it.productNameEn || (it.product && it.product.nameEn) || "");
+                                    const price = it.price != null ? it.price : (it.product && it.product.price) || 0;
+                                    return (
+                                      <div key={idx} className="flex items-center justify-between text-xs pt-2 first:pt-0">
+                                        <span className="font-bold text-zinc-800 dark:text-zinc-200">
+                                          {name} <span className="text-zinc-400">(x{it.quantity})</span>
+                                        </span>
+                                        <span className="font-mono text-zinc-500">{price * it.quantity} {isAr ? "ج.م" : "EGP"}</span>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                                 <div className="border-t border-dashed border-zinc-200 dark:border-zinc-800 mt-3 pt-3 flex justify-between text-sm font-extrabold text-emerald-600 dark:text-emerald-400">
                                   <span>{isAr ? "إجمالي المبلغ المطلوب" : "Receipt Grand Total"}</span>
