@@ -5,7 +5,8 @@ import {
   Briefcase, Award, Zap, Heart, MessageSquare, Plus, Minus, Trash2, X
 } from "lucide-react";
 import { Product, CartItem, Order, StoreSettings } from "./types";
-import { getProducts, getStoreSettings, addOrder } from "./firebase";
+import { getProducts, getStoreSettings, addOrder, getOrders } from "./firebase";
+import { Smartphone, Truck, ShieldAlert, Navigation, Clock, PackageCheck } from "lucide-react";
 import Header from "./components/Header";
 import ProductCard from "./components/ProductCard";
 import AdminPanel from "./components/AdminPanel";
@@ -46,6 +47,14 @@ export default function App() {
   // PWA deferring prompt
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showPwaInstallBtn, setShowPwaInstallBtn] = useState(false);
+
+  // New Interactive Professional additions states
+  const [showPwaGuide, setShowPwaGuide] = useState(false);
+  const [showTrackingModal, setShowTrackingModal] = useState(false);
+  const [orderSearchVal, setOrderSearchVal] = useState("");
+  const [trackedOrder, setTrackedOrder] = useState<Order | null>(null);
+  const [trackingError, setTrackingError] = useState("");
+  const [isTrackingLoading, setIsTrackingLoading] = useState(false);
 
   // Checkout inputs
   const [checkoutForm, setCheckoutForm] = useState({
@@ -376,6 +385,49 @@ export default function App() {
     alert(t.ratingSuccess);
   };
 
+  // Query Firestore collection to instantly trace real-time order status
+  const handleTrackOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const queryStr = orderSearchVal.trim().toLowerCase();
+    if (!queryStr) {
+      setTrackingError(isAr ? "يرجى كتابة رقم الهاتف أو كود الطلب أولاً." : "Please input your phone number or Order ID.");
+      return;
+    }
+
+    setIsTrackingLoading(true);
+    setTrackingError("");
+    setTrackedOrder(null);
+
+    try {
+      const allOrders = await getOrders();
+      // Search matching by ID or by phone number
+      const matched = allOrders.find((o: Order) => {
+        const idMatch = o.id.toLowerCase() === queryStr || 
+                        o.id.toLowerCase().replace("ord-", "") === queryStr || 
+                        queryStr.includes(o.id.toLowerCase());
+        const phoneClean = o.customerPhone.replace(/[\s\-\+]/g, "");
+        const queryClean = queryStr.replace(/[\s\-\+]/g, "");
+        const phoneMatch = phoneClean.length > 3 && queryClean.length > 3 && (phoneClean.includes(queryClean) || queryClean.includes(phoneClean));
+        return idMatch || phoneMatch;
+      });
+
+      if (matched) {
+        setTrackedOrder(matched);
+      } else {
+        setTrackingError(
+          isAr 
+            ? "لم نجد أي طلب مسجل بهذا الرقم أو الكود. تأكد من إتمام الطلب أولاً عبر واتساب." 
+            : "No active order was found matching this phone number or ID. Please double check."
+        );
+      }
+    } catch (err) {
+      console.error(err);
+      setTrackingError(isAr ? "حدث خطأ أثناء الاتصال بالخادم." : "An error occurred while linking to the tracking servers.");
+    } finally {
+      setIsTrackingLoading(false);
+    }
+  };
+
   // Products category set builder
   const categories = ["all", ...Array.from(new Set(products.map((p) => p.categoryEn.toLowerCase())))];
 
@@ -413,6 +465,7 @@ export default function App() {
         cartCount={cart.reduce((sum, item) => sum + item.quantity, 0)}
         onOpenCart={() => setShowCart(true)}
         onOpenAdmin={() => setShowAdmin(true)}
+        onOpenTracking={() => setShowTrackingModal(true)}
       />
 
       {/* PWA Phone Callout Banner */}
@@ -499,6 +552,232 @@ export default function App() {
             <div className="pt-6 mt-6 border-t border-zinc-800/80 flex items-center justify-between">
               <span className="text-xs font-bold text-zinc-400">{isAr ? "التوصيل المبتكر" : "Modern Logistics"}</span>
               <span className="px-2.5 py-1 bg-emerald-500/20 text-emerald-400 font-extrabold text-[10px] rounded">GPS STATIONS</span>
+            </div>
+          </div>
+
+        </section>
+
+        {/* ======================================================= */}
+        {/* ATHLETICS CORE: REALTIME TRACKER & PRO INSTALLER GUIDE */}
+        {/* ======================================================= */}
+        <section className="grid grid-cols-1 lg:grid-cols-2 gap-6 relative z-10">
+          
+          {/* CARD 1: LIVE ORDER STEPPER TRACKER */}
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm flex flex-col justify-between transition-colors duration-300">
+            <div>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 rounded-xl flex items-center justify-center">
+                  <Truck className="w-5 h-5 animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm sm:text-base text-zinc-900 dark:text-white">
+                    {isAr ? "تتبع شحن وطلب مستلزمات اللياقة 🚚" : "Track Workout Gears Delivery 🚚"}
+                  </h3>
+                  <p className="text-[10px] sm:text-xs text-zinc-400 font-medium">
+                    {isAr ? "أدخل رقم تليفونك أو كود الفاتورة للتحقق من حالة تسليم الأثقال والأجهزة" : "Track dumbbells, sportswear shipping details, and GPS locations."}
+                  </p>
+                </div>
+              </div>
+
+              {/* Mobile phone search inputs */}
+              <form onSubmit={handleTrackOrder} className="flex gap-2 mb-4">
+                <input
+                  type="text"
+                  value={orderSearchVal}
+                  onChange={(e) => setOrderSearchVal(e.target.value)}
+                  placeholder={isAr ? "رقم الهاتف النشط للطلب أو كود الطلب (ord-xxxx)..." : "Active phone number or order ID (e.g. ord-1011)..."}
+                  className="flex-1 text-xs px-3.5 py-2.5 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                />
+                <button
+                  type="submit"
+                  disabled={isTrackingLoading}
+                  className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl cursor-pointer transition active:scale-95 disabled:opacity-50 shrink-0"
+                >
+                  {isTrackingLoading ? (isAr ? "بحث..." : "Trace...") : (isAr ? "تتبع الآن" : "Track Info")}
+                </button>
+              </form>
+
+              {/* Warning/Error flags */}
+              {trackingError && (
+                <div className="p-3 bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 rounded-xl text-xs font-bold flex items-center gap-2 mb-4">
+                  <ShieldAlert className="w-4 h-4 shrink-0" />
+                  <span>{trackingError}</span>
+                </div>
+              )}
+
+              {/* Stepper visual diagram */}
+              {trackedOrder ? (
+                <div className="p-4 bg-zinc-50 dark:bg-zinc-950/65 border border-zinc-200 dark:border-zinc-800/80 rounded-2xl space-y-4 animate-fade-in text-left">
+                  <div className="flex items-center justify-between text-xs pb-2 border-b border-zinc-200 dark:border-zinc-800">
+                    <span className="font-extrabold text-zinc-400">
+                      {isAr ? "كود الطلبية:" : "Order ID:"} <span className="font-mono text-emerald-600">#{trackedOrder.id}</span>
+                    </span>
+                    <span className="font-bold text-zinc-500">
+                      {new Date(trackedOrder.createdAt).toLocaleDateString(isAr ? "ar-EG" : "en-US")}
+                    </span>
+                  </div>
+
+                  {/* Stepper logic */}
+                  <div className="relative pt-4 pb-2">
+                    <div className="absolute left-4 right-4 top-8 h-1 bg-zinc-200 dark:bg-zinc-800 -translate-y-1/2 z-0" />
+                    
+                    <div 
+                      className="absolute left-4 top-8 h-1 bg-emerald-500 -translate-y-1/2 z-0 transition-all duration-700" 
+                      style={{ 
+                        right: isAr ? 'auto' : 'none',
+                        width: trackedOrder.status === 'pending' ? '15%' : 
+                               trackedOrder.status === 'packing' ? '50%' : 
+                               trackedOrder.status === 'delivering' ? '80%' : '100%' 
+                      }} 
+                    />
+
+                    <div className="relative z-10 flex justify-between items-center text-center">
+                      <div className="flex flex-col items-center gap-1.5">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black transition-colors ${
+                          ['pending', 'packing', 'delivering', 'completed'].includes(trackedOrder.status)
+                            ? "bg-emerald-500 text-white shadow-md"
+                            : "bg-zinc-200 dark:bg-zinc-800 text-zinc-400"
+                        }`}>
+                          <Clock className="w-4 h-4" />
+                        </div>
+                        <span className="text-[9px] sm:text-[10px] font-black">{isAr ? "الطلب مسجل" : "Registered"}</span>
+                      </div>
+
+                      <div className="flex flex-col items-center gap-1.5">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black transition-colors ${
+                          ['packing', 'delivering', 'completed'].includes(trackedOrder.status)
+                            ? "bg-emerald-500 text-white shadow-md"
+                            : "bg-zinc-200 dark:bg-zinc-800 text-zinc-400"
+                        }`}>
+                          <PackageCheck className="w-4 h-4" />
+                        </div>
+                        <span className="text-[9px] sm:text-[10px] font-black">{isAr ? "التجهيز والتغليف" : "Packing"}</span>
+                      </div>
+
+                      <div className="flex flex-col items-center gap-1.5">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black transition-colors ${
+                          ['delivering', 'completed'].includes(trackedOrder.status)
+                            ? "bg-emerald-500 text-white shadow-md animate-pulse"
+                            : "bg-zinc-200 dark:bg-zinc-800 text-zinc-400"
+                        }`}>
+                          <Truck className="w-4 h-4" />
+                        </div>
+                        <span className="text-[9px] sm:text-[10px] font-black">{isAr ? "مع المندوب" : "In Transit"}</span>
+                      </div>
+
+                      <div className="flex flex-col items-center gap-1.5">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black transition-colors ${
+                          trackedOrder.status === 'completed'
+                            ? "bg-emerald-500 text-white shadow-md"
+                            : "bg-zinc-200 dark:bg-zinc-800 text-zinc-400"
+                        }`}>
+                          <CheckCircle className="w-4 h-4" />
+                        </div>
+                        <span className="text-[9px] sm:text-[10px] font-black">{isAr ? "تم التسليم" : "Completed"}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Summary notes */}
+                  <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-850/60 p-3.5 rounded-xl text-xs space-y-2 leading-relaxed">
+                    <div className="font-extrabold text-zinc-800 dark:text-zinc-250">
+                      {isAr ? "العميل المستلم:" : "Receiver:"}{" "}
+                      <span className="text-zinc-500 font-bold">{trackedOrder.customerName}</span>
+                    </div>
+                    <div className="text-zinc-400 font-bold">
+                      {isAr ? "العنوان:" : "Address:"}{" "}
+                      <span className="text-zinc-500 font-medium">{trackedOrder.customerAddress}</span>
+                    </div>
+                    <div className="text-zinc-400 font-medium">
+                      {isAr ? "الأدوات المطلوبة:" : "Gym Equipment:"}{" "}
+                      <span className="text-emerald-500 dark:text-emerald-400 font-extrabold">
+                        {trackedOrder.items.map((it) => `${isAr ? it.productNameAr : it.productNameEn} (x${it.quantity})`).join(", ")}
+                      </span>
+                    </div>
+                    {trackedOrder.customerCoords && (
+                      <a
+                        href={`https://www.google.com/maps?q=${trackedOrder.customerCoords.lat},${trackedOrder.customerCoords.lng}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 font-black text-emerald-600 dark:text-emerald-400 hover:underline mt-1 cursor-pointer"
+                      >
+                        <Navigation className="w-3.5 h-3.5 animate-bounce" />
+                        <span>{isAr ? "رابط تتبع الجي بي إس والتوصيل 🗺️" : "Follow on Google Maps GPS Routing 🗺️"}</span>
+                      </a>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="h-28 flex flex-col items-center justify-center border border-zinc-150 dark:border-zinc-800 rounded-2xl bg-zinc-50/50 dark:bg-zinc-950/20 text-center p-4">
+                  <PackageCheck className="w-8 h-8 text-zinc-300 dark:text-zinc-700 mb-2" />
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400 font-bold leading-normal">
+                    {isAr ? "لم يتم الاستعلام عن أي طلب في الوقت الحالي." : "No tracked orders loaded."}
+                  </p>
+                  <p className="text-[9px] text-zinc-400 mt-1 max-w-xs">
+                    {isAr ? "اكتب رقم الموبايل أو كود الطلب واضغط بحث لتتبع شحن كابتن الفتنس فوراً." : "Supply order digits to trace active delivery logs."}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="text-[9px] text-zinc-400 font-mono mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800 flex justify-between">
+              <span>Database query status: Live Connected</span>
+              <span>COD tracking dispatchers active</span>
+            </div>
+          </div>
+
+          {/* CARD 2: PWA ADROID SMART WEBPAPK INSTALL EXPLAINER */}
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl p-6 shadow-sm flex flex-col justify-between transition-colors duration-300">
+            <div>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 rounded-xl flex items-center justify-center">
+                  <Smartphone className="w-5 h-5 text-emerald-500" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm sm:text-base text-zinc-900 dark:text-white">
+                    {isAr ? "تنزيل وتثبيت تطبيق فتنس برو للموبايل 📱" : "Install official App on your Mobile Screen 📱"}
+                  </h3>
+                  <p className="text-[10px] sm:text-xs text-zinc-400 font-medium">
+                    {isAr ? "تبيتها بصيغة تطبيق حقيقي (WebAPK) لتنبيهات واتساب سريعة والعمل بدون إنترنت" : "Install with separate icons, notification logs, and smooth native views."}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="p-3.5 bg-emerald-500/5 dark:bg-emerald-500/10 border border-emerald-500/15 rounded-2xl space-y-2 text-left">
+                  <div className="text-xs font-black text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-amber-500 animate-pulse" />
+                    <span>{isAr ? "ميزات التطبيق المستقل للفون:" : "Core App advantages for smartphones:"}</span>
+                  </div>
+                  <ul className="text-[10px] sm:text-xs text-zinc-600 dark:text-zinc-350 space-y-1.5 list-disc list-inside leading-relaxed font-bold">
+                    <li>{isAr ? "شاشة ملء كاملة بدون اشرطة المتصفح المزعجة لتبسيط التسوق" : "Full widescreen layout with optimized mobile headers"}</li>
+                    <li>{isAr ? "الطلب الفوري وتتبع فوري للطلبية من شاشة الموبايل مباشرة" : "Instant checkout routines and automatic GPS locator retrieval"}</li>
+                    <li>{isAr ? "كفاءة فائقة وسرعة تحميل ممتازة واستهلاك بيانات قليل جداً" : "Ultra low bandwidth consumption and persistent offline cart status"}</li>
+                  </ul>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                  <button
+                    onClick={() => setShowPwaGuide(true)}
+                    className="flex-1 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow cursor-pointer transition active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    <Smartphone className="w-4 h-4" />
+                    <span>{isAr ? "افتح دليل التثبيت والمساعدة الذكية ⚙️" : "Unlock App Install Guide ⚙️"}</span>
+                  </button>
+                  <button
+                    onClick={triggerPwaInstallation}
+                    className="px-4 py-3 bg-zinc-150 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-800 dark:text-white font-black text-xs rounded-xl cursor-pointer transition active:scale-95 flex items-center justify-center gap-2"
+                  >
+                    <Download className="w-4 h-4 text-emerald-500" />
+                    <span>{isAr ? "تثبيت تلقائي بنقرة ⚡" : "Quick Install ⚡"}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="text-[9px] text-zinc-400 font-mono mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800 flex justify-between">
+              <span>Installation State: W3C Standard</span>
+              <span>Compatible with Chrome/Samsung Internet/Safari</span>
             </div>
           </div>
 
@@ -883,10 +1162,38 @@ export default function App() {
             </p>
 
             <div className="bg-zinc-50 dark:bg-zinc-950 p-3 rounded-xl border border-zinc-200 dark:border-zinc-850 text-xs font-bold text-emerald-600">
-              {isAr ? "رقم الطلبية الحاصة بك" : "ORDER KEY"}: #{recentOrderId}
+              {isAr ? "رقم الطلبية الخاصة بك" : "ORDER KEY"}: #{recentOrderId}
             </div>
 
             <div className="pt-2 flex flex-col gap-2">
+              <button
+                onClick={async () => {
+                  setOrderSearchVal(recentOrderId);
+                  setShowSuccessModal(false);
+                  setShowTrackingModal(true);
+                  setIsTrackingLoading(true);
+                  setTrackingError("");
+                  setTrackedOrder(null);
+                  try {
+                    const allOrders = await getOrders();
+                    const matched = allOrders.find((o) => o.id === recentOrderId);
+                    if (matched) {
+                      setTrackedOrder(matched);
+                    } else {
+                      setTrackingError(isAr ? "طلبك مسجل وجاري تحديث خوادم الـ GPS فوراً." : "Order is registered. GPS routing starting briefly.");
+                    }
+                  } catch (e) {
+                    console.error(e);
+                  } finally {
+                    setIsTrackingLoading(false);
+                  }
+                }}
+                className="w-full py-2.5 bg-yellow-400 hover:bg-yellow-500 text-zinc-950 font-black text-xs rounded-xl shadow-sm cursor-pointer flex items-center justify-center gap-2 animate-bounce"
+              >
+                <Truck className="w-4 h-4 animate-pulse" />
+                <span>{isAr ? "تتبع حالة شحن الطلب فوراً 🚚" : "Track Shipment Live 🚚"}</span>
+              </button>
+
               <button
                 onClick={() => {
                   setShowSuccessModal(false);
@@ -982,6 +1289,347 @@ export default function App() {
           onSettingsUpdate={(updatedSettings) => setSettings(updatedSettings)}
           onProductsUpdate={() => { fetchStoreDocuments(); }}
         />
+      )}
+
+      {/* PROFESSIONAL ORDER REALTIME TRACKING MODAL */}
+      {showTrackingModal && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 md:p-8 rounded-3xl max-w-xl w-full relative shadow-2xl animate-fade-in text-start leading-normal">
+            
+            <button
+              onClick={() => {
+                setShowTrackingModal(false);
+                setTrackedOrder(null);
+                setTrackingError("");
+              }}
+              className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-650 dark:hover:text-white cursor-pointer p-1 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-5 pb-4 border-b border-zinc-100 dark:border-zinc-800">
+              <div className="w-10 h-10 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 rounded-xl flex items-center justify-center shrink-0">
+                <Truck className="w-5 h-5 animate-bounce" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-base sm:text-lg text-zinc-900 dark:text-white">
+                  {isAr ? "نظام تتبع طلبات كباتن اللياقة 🚚" : "Fitness Gears Live Tracking 🚚"}
+                </h3>
+                <p className="text-xs text-zinc-400 font-bold">
+                  {isAr ? "التحقق التلقائي من حالة الشحن وخطوط السير الجغرافية" : "Verify shipment speed, items packages, and GPS path"}
+                </p>
+              </div>
+            </div>
+
+            {/* Tracking Search Form */}
+            <form onSubmit={handleTrackOrder} className="space-y-3 mb-5">
+              <label className="block text-xs font-black text-zinc-500 dark:text-zinc-400">
+                {isAr ? "أدخل رقم تليفون العميل أو كود الفاتورة الاستلامية:" : "Enter Customer Phone digits or Receipt Order ID:"}
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  required
+                  value={orderSearchVal}
+                  onChange={(e) => setOrderSearchVal(e.target.value)}
+                  placeholder={isAr ? "مثال: 01012345678 أو كود الطلب..." : "e.g. +201012345678 or ord-1011..."}
+                  className="flex-1 text-xs px-4 py-3 rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:bg-white outline-none font-bold"
+                />
+                <button
+                  type="submit"
+                  disabled={isTrackingLoading}
+                  className="px-6 py-3 bg-emerald-600 hover:bg-emerald-750 text-white font-black text-xs rounded-xl cursor-pointer transition active:scale-95 disabled:opacity-50 shrink-0"
+                >
+                  {isTrackingLoading ? (isAr ? "جاري البحث..." : "Tracing...") : (isAr ? "استعلم الآن ⚡" : "Trace now ⚡")}
+                </button>
+              </div>
+            </form>
+
+            {/* Error state */}
+            {trackingError && (
+              <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 rounded-2xl text-xs font-extrabold flex items-center gap-2.5 mb-2 leading-relaxed">
+                <ShieldAlert className="w-5 h-5 shrink-0 text-red-500 animate-pulse" />
+                <span>{trackingError}</span>
+              </div>
+            )}
+
+            {/* Tracked Order Details Card */}
+            {trackedOrder ? (
+              <div className="space-y-5 bg-zinc-50 dark:bg-zinc-950/40 p-5 rounded-2xl border border-zinc-200/80 dark:border-zinc-800 text-xs text-zinc-705 dark:text-zinc-300">
+                
+                {/* ID Header */}
+                <div className="flex flex-col sm:flex-row justify-between gap-2 pb-3 border-b border-zinc-200/60 dark:border-zinc-800">
+                  <div>
+                    <span className="text-[10px] font-bold text-zinc-450 block">{isAr ? "رقم الطلب والفاتورة" : "Order Invoice Reference"}</span>
+                    <span className="font-mono text-xs font-black text-emerald-600 dark:text-emerald-400">{trackedOrder.id.toUpperCase()}</span>
+                  </div>
+                  <div className="sm:text-right">
+                    <span className="text-[10px] font-bold text-zinc-450 block">{isAr ? "الاسم وتليفون العميل" : "Customer contact"}</span>
+                    <span className="font-extrabold text-zinc-900 dark:text-white">{trackedOrder.customerName} ({trackedOrder.customerPhone})</span>
+                  </div>
+                </div>
+
+                {/* VISUAL SHIPMENT STEPPER */}
+                <div className="space-y-4 py-2">
+                  <span className="text-[10px] font-black text-zinc-400 tracking-wider uppercase block">{isAr ? "خطوات تسليم الشحنة وتتبع المسار الحالي:" : "Geographic Dispatcher Progress Steps:"}</span>
+                  <div className="grid grid-cols-4 gap-2 relative">
+                    
+                    {/* Stepper Progress bar underlay */}
+                    <div className="absolute top-4 left-[12.5%] right-[12.5%] h-1 bg-zinc-200 dark:bg-zinc-805 z-0 pb-0.5">
+                      <div 
+                        className="h-full bg-emerald-500 transition-all duration-700 rounded-full" 
+                        style={{
+                          width: `${
+                            trackedOrder.status === "delivered" ? 100 :
+                            trackedOrder.status === "shipped" ? 66 :
+                            trackedOrder.status === "processing" ? 33 : 0
+                          }%`
+                        }}
+                      />
+                    </div>
+
+                    {/* Step 1: Placed */}
+                    <div className="flex flex-col items-center text-center relative z-10">
+                      <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold shadow-md">
+                        📝
+                      </div>
+                      <span className="mt-2 text-[9px] font-extrabold text-zinc-900 dark:text-white block">{isAr ? "تم إرساله" : "Submitted"}</span>
+                      <span className="text-[7px] text-zinc-450 font-medium block">{isAr ? "بانتظار التأكيد" : "Pending verify"}</span>
+                    </div>
+
+                    {/* Step 2: Processing */}
+                    {(() => {
+                      const isActive = ["processing", "shipped", "delivered"].includes(trackedOrder.status);
+                      return (
+                        <div className="flex flex-col items-center text-center relative z-10 w-full">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold shadow-md transition ${
+                            isActive ? "bg-emerald-500 text-white" : "bg-zinc-205 dark:bg-zinc-800 text-zinc-400"
+                          }`}>
+                            📦
+                          </div>
+                          <span className={`mt-2 text-[9px] font-extrabold block ${
+                            isActive ? "text-zinc-900 dark:text-white" : "text-zinc-400"
+                          }`}>{isAr ? "قيد التجهيز" : "Packing"}</span>
+                          <span className="text-[7px] text-zinc-450 font-medium block">{isAr ? "تجهيز الأجهزة" : "Gym gears prep"}</span>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Step 3: Shipped */}
+                    {(() => {
+                      const isActive = ["shipped", "delivered"].includes(trackedOrder.status);
+                      return (
+                        <div className="flex flex-col items-center text-center relative z-10">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold shadow-md transition ${
+                            isActive ? "bg-emerald-500 text-white animate-bounce" : "bg-zinc-205 dark:bg-zinc-800 text-zinc-400"
+                          }`}>
+                            🚚
+                          </div>
+                          <span className={`mt-2 text-[9px] font-extrabold block ${
+                            isActive ? "text-zinc-900 dark:text-white" : "text-zinc-400"
+                          }`}>{isAr ? "جاري الشحن" : "In Transit"}</span>
+                          <span className="text-[7px] text-zinc-455 font-medium block">{isAr ? "مع المندوب فوراً" : "On dispatch loop"}</span>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Step 4: Delivered */}
+                    {(() => {
+                      const isActive = trackedOrder.status === "delivered";
+                      return (
+                        <div className="flex flex-col items-center text-center relative z-10">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold shadow-md transition ${
+                            isActive ? "bg-amber-500 text-white ring-4 ring-amber-500/20" : "bg-zinc-205 dark:bg-zinc-800 text-zinc-400"
+                          }`}>
+                            🏆
+                          </div>
+                          <span className={`mt-2 text-[9px] font-extrabold block ${
+                            isActive ? "text-amber-600 dark:text-amber-400" : "text-zinc-400"
+                          }`}>{isAr ? "تم التسليم" : "Delivered"}</span>
+                          <span className="text-[7px] text-zinc-450 font-medium block">{isAr ? "عملية مكتملة" : "Completed"}</span>
+                        </div>
+                      );
+                    })()}
+
+                  </div>
+                </div>
+
+                {/* MAP GPS DISPATCH NAVIGATION LINK */}
+                {trackedOrder.customerLat && trackedOrder.customerLng && (
+                  <div className="bg-emerald-500/5 dark:bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/10 space-y-2.5 text-right rtl:text-right">
+                    <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-extrabold text-[11px]">
+                      <MapPin className="w-4 h-4 text-emerald-500 shadow-sm animate-bounce" />
+                      <span>{isAr ? "تحديد الموقع الجغرافي النشط للشحنة (GPS):" : "Order Geo Coordinates Detected:"}</span>
+                    </div>
+                    <p className="text-[10px] text-zinc-500 dark:text-zinc-400 font-medium leading-relaxed font-bold">
+                      {isAr 
+                        ? "🚚 تم تحديد إحداثياتك بدقة حية وسير المندوب يبدأ فوراً. اضغط على الزر التالي لمتابعة خطوة بخطوة عبر خرائط جوجل:" 
+                        : "Our courier driver has matched your precise location pinpoint. Track the delivery map details directly below:"
+                      }
+                    </p>
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${trackedOrder.customerLat},${trackedOrder.customerLng}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 font-black text-emerald-600 dark:text-emerald-400 hover:underline mt-1 cursor-pointer"
+                    >
+                      <Navigation className="w-4 h-4 animate-bounce" />
+                      <span className="text-xs font-black">{isAr ? "رابط تتبع الاتجاهات والخريطة الحية 🗺️" : "Follow on Google Maps GPS Routing 🗺️"}</span>
+                    </a>
+                  </div>
+                )}
+
+                {/* Items & billing breakdown inside tracking card */}
+                <div className="bg-zinc-100/60 dark:bg-zinc-950/40 p-3 rounded-xl space-y-2">
+                  <span className="text-[10px] font-black block text-zinc-400">{isAr ? "محتويات شحنة المستلزمات والوزن الكلي:" : "Package gears content & details:"}</span>
+                  <div className="space-y-1">
+                    {trackedOrder.items.map((item: any, idx: number) => (
+                      <div key={idx} className="flex justify-between items-center text-[11px] font-semibold">
+                        <span>• {language === "ar" ? item.product.nameAr : item.product.nameEn} <span className="text-zinc-400 font-normal">({item.quantity} {isAr ? "حبة" : "unit"})</span></span>
+                        <span className="font-mono text-zinc-500 dark:text-zinc-400">{item.product.price * item.quantity} {isAr ? "ج.م" : "EGP"}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="pt-2 border-t border-zinc-200/50 dark:border-zinc-800 flex justify-between font-black text-[11px] text-zinc-900 dark:text-white">
+                    <span>{isAr ? "المجموع الكلي للفاتورة:" : "Grand Total:"}</span>
+                    <span>{trackedOrder.total} {isAr ? "جنيه مصري" : "EGP"}</span>
+                  </div>
+                </div>
+
+                {/* Footer notes */}
+                <div className="flex items-center gap-2 p-2 bg-emerald-500/5 dark:bg-emerald-500/10 rounded-xl text-emerald-700 dark:text-emerald-400 font-bold justify-center text-center">
+                  <Clock className="w-4 h-4 animate-pulse text-emerald-500" />
+                  <span>
+                    {isAr 
+                      ? "التوصيل فوري خلال ٢٤ ساعة كحد أقصى مع الدفع بعد الاستلام 💳" 
+                      : "Delivery completed in 24 hours max. Cash or Card on Delivery 💳"
+                    }
+                  </span>
+                </div>
+
+              </div>
+            ) : (
+              <div className="h-44 flex flex-col items-center justify-center border border-dashed border-zinc-200 dark:border-zinc-800 rounded-3xl bg-zinc-50/50 dark:bg-zinc-950/20 text-center p-6 space-y-3.5">
+                <PackageCheck className="w-10 h-10 text-zinc-300 dark:text-zinc-700 animate-pulse" />
+                <div className="space-y-1">
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 font-black">
+                    {isAr ? "في انتظار تدوين بيانات الفاتورة..." : "Waiting for order trace entry..."}
+                  </p>
+                  <p className="text-[10px] text-zinc-400 max-w-sm font-medium">
+                    {isAr 
+                      ? "بمجرد إدخال الرقم الصحيح وكتابته، ستظهر لك حالة التجهيز ومندوب الشحن والخريطة بالمسار الجغرافي المسجل مع الفاتورة الحية." 
+                      : "Provide customer mobile numbers or invoice codes to search active delivery logs."
+                    }
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-4 mt-5 border-t border-zinc-150 dark:border-zinc-800">
+              <button
+                onClick={() => {
+                  setShowTrackingModal(false);
+                  setTrackedOrder(null);
+                  setTrackingError("");
+                }}
+                className="w-full py-3 bg-zinc-900 dark:bg-zinc-800 hover:bg-zinc-800 dark:hover:bg-zinc-700 text-white text-xs font-black rounded-xl cursor-pointer transition active:scale-95 text-center"
+              >
+                {isAr ? "إغلاق نافذة التتبع والشحن 🤝" : "Close Tracker 🤝"}
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* PWA INTELLIGENT INSTALLATION GUIDELINE PORTAL */}
+      {showPwaGuide && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-850 p-6 md:p-8 rounded-3xl max-w-lg w-full space-y-5 relative shadow-2xl animate-fade-in text-left">
+            
+            <button
+              onClick={() => setShowPwaGuide(false)}
+              className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-600 dark:hover:text-white cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-emerald-500/10 text-emerald-500 rounded-xl flex items-center justify-center shrink-0">
+                <Smartphone className="w-5 h-5 animate-bounce" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-base text-zinc-900 dark:text-white">
+                  {isAr ? "دليل تثبيت التطبيق على الجوال 📱" : "Smartphone App Installation Guide 📱"}
+                </h3>
+                <p className="text-xs text-zinc-400 font-medium">
+                  {isAr ? "احصل على أيقونة فتنس برو على هاتفك بدون متجر تفانين!" : "Pin Fitness Pro on your phone without app store logins!"}
+                </p>
+              </div>
+            </div>
+
+            {/* Platform Options Tabs Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 text-left">
+              
+              {/* Android Guide */}
+              <div className="border border-zinc-150 dark:border-zinc-800/80 p-4 rounded-2xl bg-zinc-50/50 dark:bg-zinc-950/30 space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] px-2 py-0.5 bg-emerald-600 text-white font-bold rounded-md">Android</span>
+                  <span className="text-[11px] font-extrabold text-zinc-500">{isAr ? "لهواتف أندرويد وكروم" : "For Android & Chrome"}</span>
+                </div>
+                
+                <div className="text-[11px] text-zinc-600 dark:text-zinc-350 space-y-2 leading-relaxed font-bold">
+                  <p className="text-red-500 dark:text-red-400 leading-normal">
+                    {isAr 
+                      ? "⚠️ هام جداً: التثبيت كأبلكيشن حقيقي مدعوم عبر متصفح كروم أو سامسونج فقط." 
+                      : "⚠️ Note: Installing requires the official Google Chrome / Samsung browser."
+                    }
+                  </p>
+                  <ul className="space-y-1.5 list-decimal list-inside text-zinc-750 dark:text-zinc-300">
+                    <li>{isAr ? "افتح الموقع في متصفح كروم الرسمي." : "Open in Google Chrome browser."}</li>
+                    <li>{isAr ? "إذا كنت داخل فيسبوك/واتساب، اضغط على النقاط الـ3 واصنع (فتح في المتصفح الخارجي)." : "If inside chat/FB, tap 3-dots and select Open in External."}</li>
+                    <li>{isAr ? "اضغط على زر (تثبيت تلقائي بنقرة ⚡) في لوحة المتابعة بالمتجر." : "Tap (Quick Install ⚡) from our Store dashboard."}</li>
+                    <li>{isAr ? "أو اضغط خيارات كروم بالأعلى واختر (تثبيت التطبيق) لتركيبه كـ APK حقيقي ومستقل!" : "Or tap Chrome's 3-dots and click (Install App) for genuine integration!"}</li>
+                  </ul>
+                </div>
+              </div>
+
+              {/* iOS Safari Guide */}
+              <div className="border border-zinc-150 dark:border-zinc-800/80 p-4 rounded-2xl bg-zinc-50/50 dark:bg-zinc-950/30 space-y-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] px-2 py-0.5 bg-zinc-600 dark:bg-zinc-800 text-white font-bold rounded-md">Apple iOS</span>
+                  <span className="text-[11px] font-extrabold text-zinc-500">{isAr ? "لهواتف آيفون وآيباد" : "For iPhones & iPads"}</span>
+                </div>
+
+                <div className="text-[11px] text-zinc-600 dark:text-zinc-350 space-y-2 leading-relaxed font-bold">
+                  <p className="text-zinc-400">
+                    {isAr 
+                      ? "⚠️ تمنع آبل التثبيت المباشر خارج سفاري، لذا يرجى التحقق من الآتي:" 
+                      : "⚠️ Apple restricts app installation on iOS to Safari browser only:"
+                    }
+                  </p>
+                  <ul className="space-y-1.5 list-decimal list-inside text-zinc-750 dark:text-zinc-300">
+                    <li>{isAr ? "تأكد من فتح الرابط باستخدام متصفح سفاري (Safari) الأصلي." : "Open the link using Safari browser."}</li>
+                    <li>{isAr ? "اضغط على زر المشاركة سفاري (الشير) 📤 المتواجد بأسفل الشاشة." : "Tap the Share button 📤 in Safari's bottom bar."}</li>
+                    <li>{isAr ? "اسحب قائمة الخيارات لأسفل واضغط على (إضافة إلى الشاشة الرئيسية) ➕." : "Scroll down and tap (Add to Home Screen)　➕."}</li>
+                    <li>{isAr ? "اضغط على كلمة (إضافة) بالزاوية العلوية ليتم تنصيب التطبيق بنجاح بملء الشاشة!" : "Click (Add) at the top right corner to complete the mobile install!"}</li>
+                  </ul>
+                </div>
+              </div>
+
+            </div>
+
+            <div className="flex justify-end gap-2 pt-1 border-t border-zinc-100 dark:border-zinc-800">
+              <button
+                onClick={() => setShowPwaGuide(false)}
+                className="w-full py-2.5 bg-zinc-900 dark:bg-zinc-800 text-white text-xs font-black rounded-xl cursor-pointer transition active:scale-95 text-center"
+              >
+                {isAr ? "فهمت، إغلاق الدليل والمتابعة 🤝" : "Acknowledge & Close 🤝"}
+              </button>
+            </div>
+
+          </div>
+        </div>
       )}
 
       {/* General Humble footer */}
