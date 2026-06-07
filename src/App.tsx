@@ -29,16 +29,39 @@ export default function App() {
     adminWhatsapp: "201012345678"
   });
   const [products, setProducts] = useState<Product[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [isAdmin, setIsAdmin] = useState<boolean>(() => {
+    return localStorage.getItem("store_admin_authenticated") === "true";
+  });
   const [loading, setLoading] = useState(true);
 
   // Cart & checkout UI overlays
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [showCart, setShowCart] = useState(false);
-  const [showCheckout, setShowCheckout] = useState(false);
-  const [showAdmin, setShowAdmin] = useState(false);
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [showRatingModal, setShowRatingModal] = useState(false);
-  const [recentOrderId, setRecentOrderId] = useState("");
+  const [cart, setCart] = useState<CartItem[]>(() => {
+    try {
+      const saved = localStorage.getItem("store_cart");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [showCart, setShowCart] = useState<boolean>(() => {
+    return localStorage.getItem("store_show_cart") === "true";
+  });
+  const [showCheckout, setShowCheckout] = useState<boolean>(() => {
+    return localStorage.getItem("store_show_checkout") === "true";
+  });
+  const [showAdmin, setShowAdmin] = useState<boolean>(() => {
+    return localStorage.getItem("store_show_admin") === "true";
+  });
+  const [showSuccessModal, setShowSuccessModal] = useState<boolean>(() => {
+    return localStorage.getItem("store_show_success_modal") === "true";
+  });
+  const [showRatingModal, setShowRatingModal] = useState<boolean>(() => {
+    return localStorage.getItem("store_show_rating_modal") === "true";
+  });
+  const [recentOrderId, setRecentOrderId] = useState<string>(() => {
+    return localStorage.getItem("store_recent_order_id") || "";
+  });
 
   // Filtering states
   const [activeCategory, setActiveCategory] = useState("all");
@@ -50,18 +73,41 @@ export default function App() {
 
   // New Interactive Professional additions states
   const [showPwaGuide, setShowPwaGuide] = useState(false);
-  const [showTrackingModal, setShowTrackingModal] = useState(false);
-  const [orderSearchVal, setOrderSearchVal] = useState("");
-  const [trackedOrder, setTrackedOrder] = useState<Order | null>(null);
+  const [showTrackingModal, setShowTrackingModal] = useState<boolean>(() => {
+    return localStorage.getItem("store_show_tracking_modal") === "true";
+  });
+  const [orderSearchVal, setOrderSearchVal] = useState<string>(() => {
+    return localStorage.getItem("store_order_search_val") || "";
+  });
+  const [trackedOrder, setTrackedOrder] = useState<Order | null>(() => {
+    try {
+      const saved = localStorage.getItem("store_tracked_order");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const [trackingError, setTrackingError] = useState("");
   const [isTrackingLoading, setIsTrackingLoading] = useState(false);
 
   // Checkout inputs
-  const [checkoutForm, setCheckoutForm] = useState({
-    name: "",
-    phone: "",
-    address: "",
-    coords: null as { lat: number; lng: number } | null
+  const [checkoutForm, setCheckoutForm] = useState(() => {
+    try {
+      const saved = localStorage.getItem("store_checkout_form");
+      return saved ? JSON.parse(saved) : {
+        name: "",
+        phone: "",
+        address: "",
+        coords: null as { lat: number; lng: number } | null
+      };
+    } catch {
+      return {
+        name: "",
+        phone: "",
+        address: "",
+        coords: null as { lat: number; lng: number } | null
+      };
+    }
   });
 
   // Interactive Testimonial Ratings
@@ -75,12 +121,64 @@ export default function App() {
   });
 
   const [newSurveyRating, setNewSurveyRating] = useState({
+    name: "",
     score: 5,
     comment: ""
   });
 
   const isAr = language === "ar";
   const directionClass = isAr ? "rtl" : "ltr";
+
+  // Sync Cart items
+  useEffect(() => {
+    localStorage.setItem("store_cart", JSON.stringify(cart));
+  }, [cart]);
+
+  // Sync state overlays
+  useEffect(() => {
+    localStorage.setItem("store_show_cart", String(showCart));
+  }, [showCart]);
+
+  useEffect(() => {
+    localStorage.setItem("store_show_checkout", String(showCheckout));
+  }, [showCheckout]);
+
+  useEffect(() => {
+    localStorage.setItem("store_show_admin", String(showAdmin));
+    setIsAdmin(localStorage.getItem("store_admin_authenticated") === "true");
+  }, [showAdmin]);
+
+  useEffect(() => {
+    localStorage.setItem("store_show_success_modal", String(showSuccessModal));
+  }, [showSuccessModal]);
+
+  useEffect(() => {
+    localStorage.setItem("store_show_rating_modal", String(showRatingModal));
+  }, [showRatingModal]);
+
+  useEffect(() => {
+    localStorage.setItem("store_show_tracking_modal", String(showTrackingModal));
+  }, [showTrackingModal]);
+
+  useEffect(() => {
+    localStorage.setItem("store_order_search_val", orderSearchVal);
+  }, [orderSearchVal]);
+
+  useEffect(() => {
+    if (trackedOrder) {
+      localStorage.setItem("store_tracked_order", JSON.stringify(trackedOrder));
+    } else {
+      localStorage.removeItem("store_tracked_order");
+    }
+  }, [trackedOrder]);
+
+  useEffect(() => {
+    localStorage.setItem("store_recent_order_id", recentOrderId);
+  }, [recentOrderId]);
+
+  useEffect(() => {
+    localStorage.setItem("store_checkout_form", JSON.stringify(checkoutForm));
+  }, [checkoutForm]);
 
   // Sync Language settings
   useEffect(() => {
@@ -112,6 +210,8 @@ export default function App() {
       }
       const activeProducts = await getProducts();
       setProducts(activeProducts);
+      const activeOrders = await getOrders();
+      setOrders(activeOrders);
     } catch (e) {
       console.error("Critical: Could not retrieve database items", e);
     } finally {
@@ -364,12 +464,12 @@ export default function App() {
   // Submit survey rating testimonial
   const submitSurveyRating = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newSurveyRating.comment.trim()) return;
+    if (!newSurveyRating.comment.trim() || !newSurveyRating.name.trim()) return;
 
     const testimonial = {
-      name: checkoutForm.name || (isAr ? "بطل مجهول" : "Inspirational Athlete"),
+      name: newSurveyRating.name.trim(),
       score: newSurveyRating.score,
-      comment: newSurveyRating.comment,
+      comment: newSurveyRating.comment.trim(),
       date: new Date().toISOString().split("T")[0]
     };
 
@@ -380,7 +480,7 @@ export default function App() {
     });
 
     // Reset survey rating state
-    setNewSurveyRating({ score: 5, comment: "" });
+    setNewSurveyRating({ name: "", score: 5, comment: "" });
     setShowRatingModal(false);
     alert(t.ratingSuccess);
   };
@@ -467,6 +567,110 @@ export default function App() {
         onOpenAdmin={() => setShowAdmin(true)}
         onOpenTracking={() => setShowTrackingModal(true)}
       />
+
+      {/* COMPREHENSIVE INTERACTIVE LOCAL STATS PANEL FOR ADMINISTRATORS ONLY */}
+      {isAdmin && (
+        <div className="bg-emerald-500/10 dark:bg-emerald-950/20 border-b border-emerald-500/25 dark:border-emerald-500/15 py-3 px-4 relative z-20">
+          <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
+            
+            <div className="flex items-center gap-2 text-start">
+              <span className="flex h-2.5 w-2.5 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+              </span>
+              <div>
+                <p className="text-xs font-black text-emerald-850 dark:text-emerald-400 tracking-wide uppercase">
+                  {isAr ? "لوحة المراقبة السريعة للموقع 📊" : "Live Manager Dashboard 📊"}
+                </p>
+                <p className="text-[10px] text-zinc-500 dark:text-zinc-400">
+                  {isAr ? "(خاص بالأدمن فقط - اضغط على أي بطاقة لعرض الداتا وتعديلها)" : "(Admins only - Click any card to manage data)"}
+                </p>
+              </div>
+            </div>
+
+            {/* Configured Admin Cards */}
+            <div className="grid grid-cols-2 md:flex md:items-center gap-2.5 flex-1 md:justify-end text-start">
+              
+              <button
+                onClick={() => {
+                  localStorage.setItem("store_admin_active_tab", "products");
+                  setShowAdmin(true);
+                }}
+                className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:border-emerald-550 p-2.5 rounded-xl flex items-center gap-2.5 cursor-pointer transition active:scale-95 text-start shadow-sm flex-1 max-w-[170px]"
+              >
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-990/30 text-emerald-600 flex items-center justify-center shrink-0">
+                  <ShoppingBag className="w-4 h-4" />
+                </div>
+                <div className="truncate">
+                  <div className="text-[10px] font-bold text-zinc-400 uppercase">{isAr ? "التشكيلة" : "Inventory"}</div>
+                  <div className="text-sm font-black text-zinc-900 dark:text-white flex items-center gap-1">
+                    <span>{products.length}</span>
+                    <span className="text-[10px] text-emerald-500 font-bold">✏️</span>
+                  </div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  localStorage.setItem("store_admin_active_tab", "orders");
+                  setShowAdmin(true);
+                }}
+                className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:border-emerald-550 p-2.5 rounded-xl flex items-center gap-2.5 cursor-pointer transition active:scale-95 text-start shadow-sm flex-1 max-w-[170px]"
+              >
+                <div className="w-8 h-8 rounded-lg bg-zinc-50 dark:bg-zinc-850 text-zinc-600 dark:text-zinc-400 flex items-center justify-center shrink-0">
+                  <Truck className="w-4 h-4 text-emerald-550" />
+                </div>
+                <div className="truncate">
+                  <div className="text-[10px] font-bold text-zinc-400 uppercase">{isAr ? "الطلبات" : "Sales Orders"}</div>
+                  <div className="text-sm font-black text-zinc-900 dark:text-white flex items-center gap-1">
+                    <span>{orders.length}</span>
+                    <span className="text-[10px] text-emerald-500 font-bold">✏️</span>
+                  </div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  localStorage.setItem("store_admin_active_tab", "reviews");
+                  setShowAdmin(true);
+                }}
+                className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:border-emerald-550 p-2.5 rounded-xl flex items-center gap-2.5 cursor-pointer transition active:scale-95 text-start shadow-sm flex-1 max-w-[170px]"
+              >
+                <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/20 text-amber-500 flex items-center justify-center shrink-0">
+                  <Star className="w-4 h-4 fill-amber-400" />
+                </div>
+                <div className="truncate">
+                  <div className="text-[10px] font-bold text-zinc-400 uppercase">{isAr ? "التقييمات" : "Feedbacks"}</div>
+                  <div className="text-sm font-black text-zinc-900 dark:text-white flex items-center gap-1">
+                    <span>{ratings.length}</span>
+                    <span className="text-[10px] text-emerald-500 font-bold">✏️</span>
+                  </div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  localStorage.setItem("store_admin_active_tab", "settings");
+                  setShowAdmin(true);
+                }}
+                className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:border-emerald-550 p-2.5 rounded-xl flex items-center gap-2.5 cursor-pointer transition active:scale-95 text-start shadow-sm flex-1 max-w-[170px]"
+              >
+                <div className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/20 text-blue-500 flex items-center justify-center shrink-0">
+                  <MapPin className="w-4 h-4 text-emerald-600" />
+                </div>
+                <div className="truncate">
+                  <div className="text-[10px] font-bold text-zinc-400 uppercase">{isAr ? "الإعدادات" : "Settings"}</div>
+                  <div className="text-xs font-black text-emerald-650 dark:text-emerald-450 truncate">
+                    {settings.adminWhatsapp || "Configure"}
+                  </div>
+                </div>
+              </button>
+
+            </div>
+
+          </div>
+        </div>
+      )}
 
       {/* PWA Phone Callout Banner */}
       {showPwaInstallBtn && (
@@ -1193,7 +1397,7 @@ export default function App() {
                     setIsTrackingLoading(false);
                   }
                 }}
-                className="w-full py-2.5 bg-yellow-400 hover:bg-yellow-500 text-zinc-950 font-black text-xs rounded-xl shadow-sm cursor-pointer flex items-center justify-center gap-2 animate-bounce"
+                className="w-full py-2.5 bg-yellow-400 hover:bg-yellow-500 text-zinc-950 font-black text-xs rounded-xl shadow-sm cursor-pointer flex items-center justify-center gap-2 animate-bounce flex-row justify-center"
               >
                 <Truck className="w-4 h-4 animate-pulse" />
                 <span>{isAr ? "تتبع حالة شحن الطلب فوراً 🚚" : "Track Shipment Live 🚚"}</span>
@@ -1201,6 +1405,7 @@ export default function App() {
 
               <button
                 onClick={() => {
+                  setNewSurveyRating({ name: "", score: 5, comment: "" });
                   setShowSuccessModal(false);
                   setShowRatingModal(true);
                 }}
@@ -1293,6 +1498,11 @@ export default function App() {
           isDarkMode={isDarkMode}
           onSettingsUpdate={(updatedSettings) => setSettings(updatedSettings)}
           onProductsUpdate={() => { fetchStoreDocuments(); }}
+          ratings={ratings}
+          onRatingsUpdate={(updatedRatings) => {
+            setRatings(updatedRatings);
+            localStorage.setItem("store_user_ratings", JSON.stringify(updatedRatings));
+          }}
         />
       )}
 

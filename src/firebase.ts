@@ -309,6 +309,24 @@ export async function updateOrder(order: any): Promise<void> {
   }
 }
 
+export async function deleteOrder(id: string): Promise<void> {
+  const local = localGet("sports_orders") || [];
+  const filtered = local.filter((o: any) => o.id !== id);
+  localSet("sports_orders", filtered);
+
+  if (isFirebaseActive && db) {
+    try {
+      await withTimeout(deleteDoc(doc(db, "orders", id)), 1500, null);
+    } catch (e) {
+      if (isPermissionError(e)) {
+        handleFirestoreError(e, OperationType.DELETE, `orders/${id}`);
+      } else {
+        console.error("Firestore error deleting order:", e);
+      }
+    }
+  }
+}
+
 export async function getStoreSettings(): Promise<any> {
   if (isFirebaseActive && db) {
     try {

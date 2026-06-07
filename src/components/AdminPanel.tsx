@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { 
-  X, Plus, Trash2, Edit3, Save, LogOut, Printer, 
+  X, Plus, Trash2, Edit3, Save, LogOut, Printer, Star,
   MessageSquare, Check, Clock, User, Phone, MapPin, 
   Settings, ShoppingBag, Landmark, KeySquare, HelpCircle, RefreshCw
 } from "lucide-react";
 import { Product, Order, StoreSettings } from "../types";
-import { getProducts, saveProduct, deleteProduct, getOrders, updateOrder, saveStoreSettings, auth } from "../firebase";
+import { getProducts, saveProduct, deleteProduct, getOrders, updateOrder, deleteOrder, saveStoreSettings, auth } from "../firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
 
 interface AdminPanelProps {
@@ -15,6 +15,8 @@ interface AdminPanelProps {
   settings: StoreSettings;
   onSettingsUpdate: (settings: StoreSettings) => void;
   onProductsUpdate: () => void;
+  ratings?: { name: string; score: number; comment: string; date: string }[];
+  onRatingsUpdate?: (updated: { name: string; score: number; comment: string; date: string }[]) => void;
 }
 
 export default function AdminPanel({
@@ -23,18 +25,32 @@ export default function AdminPanel({
   isDarkMode,
   settings,
   onSettingsUpdate,
-  onProductsUpdate
+  onProductsUpdate,
+  ratings = [],
+  onRatingsUpdate = () => {}
 }: AdminPanelProps) {
   const isAr = language === "ar";
   
-  // Tab control: 'products' | 'orders' | 'settings'
-  const [activeTab, setActiveTab] = useState<"products" | "orders" | "settings">("products");
+  // Tab control: 'products' | 'orders' | 'settings' | 'reviews'
+  const [activeTab, setActiveTab] = useState<"products" | "orders" | "settings" | "reviews">(() => {
+    return (localStorage.getItem("store_admin_active_tab") as "products" | "orders" | "settings" | "reviews") || "products";
+  });
   
   // Authentication State
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    return localStorage.getItem("store_admin_authenticated") === "true";
+  });
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
+
+  useEffect(() => {
+    localStorage.setItem("store_admin_active_tab", activeTab);
+  }, [activeTab]);
+
+  useEffect(() => {
+    localStorage.setItem("store_admin_authenticated", String(isAuthenticated));
+  }, [isAuthenticated]);
 
   // Products state
   const [products, setProducts] = useState<Product[]>([]);
@@ -47,14 +63,48 @@ export default function AdminPanel({
     descriptionAr: "",
     descriptionEn: "",
     image: "",
+    imagesStr: "",
     categoryAr: "",
     categoryEn: ""
+  });
+
+  // Client Feedbacks tab states
+  const [selectedReviewIdx, setSelectedReviewIdx] = useState<number | null>(null);
+  const [isEditingReview, setIsEditingReview] = useState(false);
+  const [reviewEditForm, setReviewEditForm] = useState({
+    name: "",
+    score: 5,
+    comment: ""
+  });
+
+  // Client Orders editing status
+  const [isEditingOrder, setIsEditingOrder] = useState(false);
+  const [orderEditForm, setOrderEditForm] = useState({
+    customerName: "",
+    customerPhone: "",
+    customerAddress: "",
+    totalPrice: 0
   });
 
   // Orders state
   const [orders, setOrders] = useState<Order[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(() => {
+    try {
+      const saved = localStorage.getItem("store_admin_selected_order");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    if (selectedOrder) {
+      localStorage.setItem("store_admin_selected_order", JSON.stringify(selectedOrder));
+    } else {
+      localStorage.removeItem("store_admin_selected_order");
+    }
+  }, [selectedOrder]);
 
   // Settings state
   const [settingsForm, setSettingsForm] = useState<StoreSettings>({ ...settings });
@@ -272,7 +322,17 @@ export default function AdminPanel({
   // Select product for editing
   const startEdit = (p: Product) => {
     setEditingProduct(p);
-    setProdForm({ ...p });
+    setProdForm({
+      nameAr: p.nameAr || "",
+      nameEn: p.nameEn || "",
+      price: p.price || 0,
+      descriptionAr: p.descriptionAr || "",
+      descriptionEn: p.descriptionEn || "",
+      image: p.image || "",
+      imagesStr: p.images && p.images.length > 0 ? p.images.join(", ") : "",
+      categoryAr: p.categoryAr || "",
+      categoryEn: p.categoryEn || ""
+    });
     setIsAddingNew(false);
   };
 
@@ -286,6 +346,7 @@ export default function AdminPanel({
       descriptionAr: "",
       descriptionEn: "",
       image: "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?q=80&w=600&auto=format&fit=crop", // placeholder sports gym image
+      imagesStr: "",
       categoryAr: "العاب اللياقة",
       categoryEn: "Cardio Tools"
     });
@@ -296,9 +357,23 @@ export default function AdminPanel({
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     const id = editingProduct ? editingProduct.id : "prod-" + Date.now();
+    
+    // Parse the comma-separated images string to an array, filtering out empty items or spaces
+    const imagesArray = prodForm.imagesStr
+      ? prodForm.imagesStr.split(/[;,]/).map((s) => s.trim()).filter((s) => s.length > 0)
+      : [];
+      
     const productPayload: Product = {
       id,
-      ...prodForm
+      nameAr: prodForm.nameAr,
+      nameEn: prodForm.nameEn,
+      price: prodForm.price,
+      descriptionAr: prodForm.descriptionAr,
+      descriptionEn: prodForm.descriptionEn,
+      image: prodForm.image || (imagesArray.length > 0 ? imagesArray[0] : ""),
+      images: imagesArray,
+      categoryAr: prodForm.categoryAr,
+      categoryEn: prodForm.categoryEn
     };
 
     await saveProduct(productPayload);
@@ -308,6 +383,158 @@ export default function AdminPanel({
     // Close form options
     setIsAddingNew(false);
     setEditingProduct(null);
+  };
+
+  // Export CSV template filled with current products details
+  const handleExportProducts = () => {
+    const headers = ["ID", "NameAr", "NameEn", "Price", "CategoryAr", "CategoryEn", "DescriptionAr", "DescriptionEn", "Images"];
+    
+    const rows = products.map((p) => [
+      p.id,
+      p.nameAr,
+      p.nameEn,
+      p.price.toString(),
+      p.categoryAr,
+      p.categoryEn,
+      p.descriptionAr.replace(/\r?\n/g, " "), // strip lines so CSV remains safe
+      p.descriptionEn.replace(/\r?\n/g, " "),
+      p.images && p.images.length > 0 ? p.images.join(";") : p.image // using semicolon as separator in CSV row field
+    ]);
+
+    // Escape fields for double quotes if necessary
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(val => `"${val.replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+
+    const BOM = "\uFEFF";
+    const blob = new Blob([BOM + csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `fitness_pro_products_template.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Upload and parse filled products CSV template
+  const handleImportProducts = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const text = evt.target?.result as string;
+        const lines = text.split(/\r?\n/);
+        if (lines.length <= 1) {
+          alert(isAr ? "الملف فارغ أو غير صحيح!" : "Selected CSV file is empty or invalid!");
+          return;
+        }
+
+        const parseCSVLine = (line: string) => {
+          const result = [];
+          let current = "";
+          let inQuotes = false;
+          for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            if (char === '"') {
+              inQuotes = !inQuotes;
+            } else if (char === ',' && !inQuotes) {
+              result.push(current.trim());
+              current = "";
+            } else {
+              current += char;
+            }
+          }
+          result.push(current.trim());
+          return result.map(val => {
+            if (val.startsWith('"') && val.endsWith('"')) {
+              val = val.substring(1, val.length - 1);
+            }
+            return val.replace(/""/g, '"');
+          });
+        };
+
+        const headers = parseCSVLine(lines[0]);
+        const colIndex = (name: string) => headers.findIndex(h => h.toLowerCase() === name.toLowerCase());
+
+        const idxId = colIndex("ID");
+        const idxNameAr = colIndex("NameAr");
+        const idxNameEn = colIndex("NameEn");
+        const idxPrice = colIndex("Price");
+        const idxCategoryAr = colIndex("CategoryAr");
+        const idxCategoryEn = colIndex("CategoryEn");
+        const idxDescAr = colIndex("DescriptionAr");
+        const idxDescEn = colIndex("DescriptionEn");
+        const idxImages = colIndex("Images");
+
+        if (idxNameAr === -1 || idxPrice === -1) {
+          alert(isAr 
+            ? "تنسيق القوالب غير صحيح. يرجى استخدام القالب المصدر." 
+            : "CSV format unrecognized. Please use the exported template format.");
+          return;
+        }
+
+        let addedCount = 0;
+        let updatedCount = 0;
+
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
+          
+          const fields = parseCSVLine(line);
+          if (fields.length < 2) continue;
+
+          const id = fields[idxId] || "prod-" + Date.now() + "-" + Math.floor(Math.random() * 1000);
+          const nameAr = fields[idxNameAr] || "";
+          const nameEn = fields[idxNameEn] || "";
+          const price = parseFloat(fields[idxPrice]) || 0;
+          const categoryAr = fields[idxCategoryAr] || "العاب اللياقة";
+          const categoryEn = fields[idxCategoryEn] || "Cardio Tools";
+          const descriptionAr = fields[idxDescAr] || "";
+          const descriptionEn = fields[idxDescEn] || "";
+          
+          const imgStr = fields[idxImages] || "";
+          const rawImages = imgStr.split(/[;,]/).map(s => s.trim()).filter(s => s.length > 0);
+          const images = rawImages;
+          const image = rawImages[0] || "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?q=80&w=600&auto=format&fit=crop";
+
+          const isExisting = products.some(p => p.id === id);
+          if (isExisting) {
+            updatedCount++;
+          } else {
+            addedCount++;
+          }
+
+          const productPayload: Product = {
+            id,
+            nameAr,
+            nameEn,
+            price,
+            categoryAr,
+            categoryEn,
+            descriptionAr,
+            descriptionEn,
+            image,
+            images
+          };
+
+          await saveProduct(productPayload);
+        }
+
+        alert(isAr 
+          ? `🎉 تم الاستيراد بنجاح! تم إضافة ${addedCount} منتج وتحديث ${updatedCount} منتج.` 
+          : `🎉 Imported successfully! Added ${addedCount} and updated ${updatedCount} products.`);
+        
+        loadData();
+        onProductsUpdate();
+      } catch (err) {
+        console.error("Error reading CSV file:", err);
+        alert(isAr ? "حدث خطأ أثناء قراءة ملف CSV!" : "An error occurred while reading the CSV!");
+      }
+    };
+    reader.readAsText(file, "UTF-8");
   };
 
   // Toggle order status in database
@@ -497,6 +724,18 @@ export default function AdminPanel({
                 </button>
 
                 <button
+                  onClick={() => setActiveTab("reviews")}
+                  className={`w-full text-left flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                    activeTab === "reviews"
+                      ? "bg-emerald-600 text-white shadow"
+                      : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800/80"
+                  }`}
+                >
+                  <Star className="w-4 h-4" />
+                  <span>{isAr ? "آراء العملاء والتقييمات ⭐" : "Feedbacks & Reviews ⭐"}</span>
+                </button>
+
+                <button
                   onClick={() => setActiveTab("settings")}
                   className={`w-full text-left flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${
                     activeTab === "settings"
@@ -638,13 +877,37 @@ export default function AdminPanel({
                         {isAr ? "إدارة التشكيلة والمعروضات" : "Current Arena Inventory"}
                       </h3>
                       {!isAddingNew && !editingProduct && (
-                        <button
-                          onClick={startAdd}
-                          className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600 text-white font-bold text-xs rounded-xl shadow cursor-pointer transition-transform duration-300 active:scale-95"
-                        >
-                          <Plus className="w-4 h-4" />
-                          <span>{t.products.addBtn}</span>
-                        </button>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={startAdd}
+                            className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600 text-white font-bold text-xs rounded-xl shadow cursor-pointer transition-transform duration-300 active:scale-95"
+                          >
+                            <Plus className="w-4 h-4" />
+                            <span>{t.products.addBtn}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={handleExportProducts}
+                            className="flex items-center gap-1.5 px-3 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-750 text-zinc-700 dark:text-zinc-300 font-bold text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 cursor-pointer transition shadow-sm"
+                            title={isAr ? "تحميل ملف قالب إكسل" : "Download Excel CSV template"}
+                          >
+                            <span className="text-emerald-500">📥</span>
+                            <span>{isAr ? "تصدير قالب إكسل" : "Export Excel Template"}</span>
+                          </button>
+
+                          <label className="flex items-center gap-1.5 px-3 py-2 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-750 text-zinc-700 dark:text-zinc-300 font-bold text-xs rounded-xl border border-zinc-200 dark:border-zinc-700 cursor-pointer transition shadow-sm">
+                            <span className="text-emerald-500">📤</span>
+                            <span>{isAr ? "رفع ملف إكسل" : "Import Excel File"}</span>
+                            <input
+                              type="file"
+                              accept=".csv"
+                              onChange={handleImportProducts}
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
                       )}
                     </div>
 
@@ -697,6 +960,19 @@ export default function AdminPanel({
                               required
                               value={prodForm.image}
                               onChange={(e) => setProdForm({ ...prodForm, image: e.target.value })}
+                              className="w-full text-xs px-3 py-2 border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-white rounded-lg outline-none"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-zinc-400 mb-1 font-sans">
+                              {isAr ? "روابط صور إضافية للمنتج (مفصولة بفاصلة ,)" : "Additional Product Image URLs (comma separated)"}
+                            </label>
+                            <textarea
+                              rows={1}
+                              value={prodForm.imagesStr || ""}
+                              placeholder={isAr ? "رابط1.jpg, رابط2.jpg, رابط3.jpg" : "link1.jpg, link2.jpg, link3.jpg"}
+                              onChange={(e) => setProdForm({ ...prodForm, imagesStr: e.target.value })}
                               className="w-full text-xs px-3 py-2 border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-white rounded-lg outline-none"
                             />
                           </div>
@@ -903,109 +1179,225 @@ export default function AdminPanel({
                           {selectedOrder ? (
                             <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-5 rounded-2xl space-y-5 text-left">
                               
-                              {/* Buyer details header */}
-                              <div className="pb-4 border-b border-zinc-100 dark:border-zinc-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                <div>
-                                  <h4 className="font-extrabold text-base text-zinc-900 dark:text-white flex items-center gap-1.5">
-                                    <User className="w-4 h-4 text-emerald-600" />
-                                    <span>{selectedOrder.customerName}</span>
+                              {isEditingOrder ? (
+                                <div className="space-y-4 border-t border-b border-zinc-150 dark:border-zinc-800 py-4 text-xs text-start">
+                                  <h4 className="font-extrabold text-sm text-emerald-600 flex items-center gap-1.5 mb-2.5">
+                                    <Edit3 className="w-4 h-4" />
+                                    <span>{isAr ? "تعديل معلومات وتفاصيل الطلبية ✏️" : "Edit Order Attributes ✏️"}</span>
                                   </h4>
-                                  <p className="text-xs text-zinc-400 font-medium">#{selectedOrder.id}</p>
-                                </div>
+                                  
+                                  <div className="space-y-3.5">
+                                    <div>
+                                      <label className="block font-bold text-zinc-400 mb-1">{isAr ? "اسم العميل" : "Buyer Name"}</label>
+                                      <input
+                                        type="text"
+                                        value={orderEditForm.customerName}
+                                        onChange={(e) => setOrderEditForm({ ...orderEditForm, customerName: e.target.value })}
+                                        className="w-full text-xs px-3.5 py-2.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
+                                      />
+                                    </div>
 
-                                <div className="flex gap-1.5">
-                                  <button
-                                    onClick={() => toggleOrderStatus(selectedOrder)}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer transition ${
-                                      selectedOrder.status === "completed"
-                                        ? "bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
-                                        : "bg-emerald-600 hover:bg-emerald-700 text-white"
-                                    }`}
-                                  >
-                                    <Check className="w-3.5 h-3.5" />
-                                    <span>
-                                      {selectedOrder.status === "completed" ? t.orders.setPending : t.orders.setCompleted}
-                                    </span>
-                                  </button>
-                                </div>
-                              </div>
+                                    <div>
+                                      <label className="block font-bold text-zinc-400 mb-1">{isAr ? "رقم الهاتف" : "Telephone Number"}</label>
+                                      <input
+                                        type="text"
+                                        value={orderEditForm.customerPhone}
+                                        onChange={(e) => setOrderEditForm({ ...orderEditForm, customerPhone: e.target.value })}
+                                        className="w-full text-xs px-3.5 py-2.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
+                                      />
+                                    </div>
 
-                              {/* Delivery and Contacts list */}
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                                <div className="space-y-2 text-zinc-600 dark:text-zinc-400">
-                                  <div className="flex items-center gap-2">
-                                    <Phone className="w-4 h-4 text-zinc-400" />
-                                    <span>{selectedOrder.customerPhone}</span>
+                                    <div>
+                                      <label className="block font-bold text-zinc-400 mb-1">{isAr ? "العنوان بالتفصيل" : "Delivery Address"}</label>
+                                      <textarea
+                                        rows={2}
+                                        value={orderEditForm.customerAddress}
+                                        onChange={(e) => setOrderEditForm({ ...orderEditForm, customerAddress: e.target.value })}
+                                        className="w-full text-xs px-3.5 py-2.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
+                                      />
+                                    </div>
+
+                                    <div>
+                                      <label className="block font-bold text-zinc-400 mb-1">{isAr ? "سعر الفاتورة الإجمالي (ج.م)" : "Invoice Grand Value (EGP)"}</label>
+                                      <input
+                                        type="number"
+                                        value={orderEditForm.totalPrice}
+                                        onChange={(e) => setOrderEditForm({ ...orderEditForm, totalPrice: parseFloat(e.target.value) || 0 })}
+                                        className="w-full text-xs px-3.5 py-2.5 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
+                                      />
+                                    </div>
                                   </div>
-                                  <div className="flex items-start gap-2">
-                                    <MapPin className="w-4 h-4 text-zinc-400 shrink-0 mt-0.5" />
-                                    <span className="line-clamp-2">{selectedOrder.customerAddress}</span>
-                                  </div>
-                                </div>
 
-                                {/* Custom google GPS maps link anchor */}
-                                <div className="flex items-center justify-end">
-                                  {selectedOrder.customerCoords ? (
-                                    <a
-                                      href={`https://www.google.com/maps?q=${selectedOrder.customerCoords.lat},${selectedOrder.customerCoords.lng}`}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 font-bold border border-emerald-200 dark:border-emerald-800 rounded-xl"
+                                  <div className="flex gap-2 pt-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => setIsEditingOrder(false)}
+                                      className="flex-1 py-2 bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold text-xs rounded-xl"
                                     >
-                                      <MapPin className="w-4 h-4 text-red-500 fill-red-500" />
-                                      <span>{t.orders.viewMap}</span>
-                                    </a>
-                                  ) : (
-                                    <span className="text-zinc-400 italic text-xs">{t.orders.noMap}</span>
-                                  )}
+                                      {isAr ? "إلغاء المعاينة" : "Cancel"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        const updatedOrder = {
+                                          ...selectedOrder,
+                                          customerName: orderEditForm.customerName,
+                                          customerPhone: orderEditForm.customerPhone,
+                                          customerAddress: orderEditForm.customerAddress,
+                                          totalPrice: orderEditForm.totalPrice
+                                        };
+                                        await updateOrder(updatedOrder);
+                                        setOrders(prev => prev.map(o => o.id === selectedOrder.id ? updatedOrder : o));
+                                        setSelectedOrder(updatedOrder);
+                                        setIsEditingOrder(false);
+                                      }}
+                                      className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow cursor-pointer"
+                                    >
+                                      {isAr ? "حفظ التعديلات 💾" : "Save Changes 💾"}
+                                    </button>
+                                  </div>
                                 </div>
-                              </div>
+                              ) : (
+                                <>
+                                  {/* Buyer details header */}
+                                  <div className="pb-4 border-b border-zinc-100 dark:border-zinc-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                    <div>
+                                      <h4 className="font-extrabold text-base text-zinc-900 dark:text-white flex items-center gap-1.5">
+                                        <User className="w-4 h-4 text-emerald-600" />
+                                        <span>{selectedOrder.customerName}</span>
+                                      </h4>
+                                      <p className="text-xs text-zinc-400 font-medium">#{selectedOrder.id}</p>
+                                    </div>
 
-                              {/* Items ordered invoice log */}
-                              <div className="bg-zinc-50 dark:bg-zinc-950/50 p-4 rounded-xl">
-                                <div className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2 border-b border-zinc-150 dark:border-zinc-800 pb-1">
-                                  {t.orders.itemsOrdered}
-                                </div>
-                                <div className="space-y-2 divide-y divide-zinc-100 dark:divide-zinc-900">
-                                  {selectedOrder.items.map((it: any, idx) => {
-                                    const name = isAr 
-                                      ? (it.productNameAr || (it.product && it.product.nameAr) || "") 
-                                      : (it.productNameEn || (it.product && it.product.nameEn) || "");
-                                    const price = it.price != null ? it.price : (it.product && it.product.price) || 0;
-                                    return (
-                                      <div key={idx} className="flex items-center justify-between text-xs pt-2 first:pt-0">
-                                        <span className="font-bold text-zinc-800 dark:text-zinc-200">
-                                          {name} <span className="text-zinc-400">(x{it.quantity})</span>
+                                    <div className="flex gap-1.5">
+                                      <button
+                                        onClick={() => toggleOrderStatus(selectedOrder)}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer transition ${
+                                          selectedOrder.status === "completed"
+                                            ? "bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
+                                            : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                                        }`}
+                                      >
+                                        <Check className="w-3.5 h-3.5" />
+                                        <span>
+                                          {selectedOrder.status === "completed" ? t.orders.setPending : t.orders.setCompleted}
                                         </span>
-                                        <span className="font-mono text-zinc-500">{price * it.quantity} {isAr ? "ج.م" : "EGP"}</span>
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {/* Delivery and Contacts list */}
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                                    <div className="space-y-2 text-zinc-600 dark:text-zinc-400">
+                                      <div className="flex items-center gap-2">
+                                        <Phone className="w-4 h-4 text-zinc-400" />
+                                        <span>{selectedOrder.customerPhone}</span>
                                       </div>
-                                    );
-                                  })}
-                                </div>
-                                <div className="border-t border-dashed border-zinc-200 dark:border-zinc-800 mt-3 pt-3 flex justify-between text-sm font-extrabold text-emerald-600 dark:text-emerald-400">
-                                  <span>{isAr ? "إجمالي المبلغ المطلوب" : "Receipt Grand Total"}</span>
-                                  <span>{selectedOrder.totalPrice} {isAr ? "ج.م" : "EGP"}</span>
-                                </div>
-                              </div>
+                                      <div className="flex items-start gap-2">
+                                        <MapPin className="w-4 h-4 text-zinc-400 shrink-0 mt-0.5" />
+                                        <span className="line-clamp-2">{selectedOrder.customerAddress}</span>
+                                      </div>
+                                    </div>
 
-                              {/* Invoice generation buttons */}
-                              <div className="pt-2 flex flex-wrap gap-2.5">
-                                <button
-                                  onClick={() => printInvoice(selectedOrder)}
-                                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer transition"
-                                >
-                                  <Printer className="w-4 h-4" />
-                                  <span>{t.orders.print}</span>
-                                </button>
+                                    {/* Custom google GPS maps link anchor */}
+                                    <div className="flex items-center justify-end">
+                                      {selectedOrder.customerCoords ? (
+                                        <a
+                                          href={`https://www.google.com/maps?q=${selectedOrder.customerCoords.lat},${selectedOrder.customerCoords.lng}`}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 font-bold border border-emerald-200 dark:border-emerald-800 rounded-xl"
+                                        >
+                                          <MapPin className="w-4 h-4 text-red-500 fill-red-500" />
+                                          <span>{t.orders.viewMap}</span>
+                                        </a>
+                                      ) : (
+                                        <span className="text-zinc-400 italic text-xs">{t.orders.noMap}</span>
+                                      )}
+                                    </div>
+                                  </div>
 
-                                <button
-                                  onClick={() => sendWhatsAppInvoice(selectedOrder)}
-                                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer transition shadow-md"
-                                >
-                                  <MessageSquare className="w-4 h-4" />
-                                  <span>{t.orders.sendWhatsapp}</span>
-                                </button>
-                              </div>
+                                  {/* Items ordered invoice log */}
+                                  <div className="bg-zinc-50 dark:bg-zinc-950/50 p-4 rounded-xl">
+                                    <div className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2 border-b border-zinc-150 dark:border-zinc-800 pb-1">
+                                      {t.orders.itemsOrdered}
+                                    </div>
+                                    <div className="space-y-2 divide-y divide-zinc-100 dark:divide-zinc-900">
+                                      {selectedOrder.items.map((it: any, idx) => {
+                                        const name = isAr 
+                                          ? (it.productNameAr || (it.product && it.product.nameAr) || "") 
+                                          : (it.productNameEn || (it.product && it.product.nameEn) || "");
+                                        const price = it.price != null ? it.price : (it.product && it.product.price) || 0;
+                                        return (
+                                          <div key={idx} className="flex items-center justify-between text-xs pt-2 first:pt-0">
+                                            <span className="font-bold text-zinc-800 dark:text-zinc-200">
+                                              {name} <span className="text-zinc-400">(x{it.quantity})</span>
+                                            </span>
+                                            <span className="font-mono text-zinc-500">{price * it.quantity} {isAr ? "ج.م" : "EGP"}</span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                    <div className="border-t border-dashed border-zinc-200 dark:border-zinc-800 mt-3 pt-3 flex justify-between text-sm font-extrabold text-emerald-600 dark:text-emerald-400">
+                                      <span>{isAr ? "إجمالي المبلغ المطلوب" : "Receipt Grand Total"}</span>
+                                      <span>{selectedOrder.totalPrice} {isAr ? "ج.م" : "EGP"}</span>
+                                    </div>
+                                  </div>
+
+                                  {/* Invoice generation buttons */}
+                                  <div className="pt-2 flex flex-wrap gap-2.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => printInvoice(selectedOrder)}
+                                      className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer transition"
+                                    >
+                                      <Printer className="w-4 h-4" />
+                                      <span>{t.orders.print}</span>
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => sendWhatsAppInvoice(selectedOrder)}
+                                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer transition shadow-md"
+                                    >
+                                      <MessageSquare className="w-4 h-4" />
+                                      <span>{t.orders.sendWhatsapp}</span>
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setOrderEditForm({
+                                          customerName: selectedOrder.customerName || "",
+                                          customerPhone: selectedOrder.customerPhone || "",
+                                          customerAddress: selectedOrder.customerAddress || "",
+                                          totalPrice: selectedOrder.totalPrice || 0
+                                        });
+                                        setIsEditingOrder(true);
+                                      }}
+                                      className="px-4 py-2 bg-zinc-100 hover:bg-zinc-205 dark:bg-zinc-800 dark:hover:bg-zinc-750 text-zinc-700 dark:text-zinc-200 font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer transition border border-zinc-250 dark:border-zinc-700"
+                                    >
+                                      <Edit3 className="w-4 h-4 text-emerald-550" />
+                                      <span>{isAr ? "تعديل الفاتورة" : "Edit Details"}</span>
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        if (window.confirm(isAr ? "هل أنت متأكد من حذف وإلغاء هذه الفاتورة نهائياً؟ لا يمكن استعادتها." : "Are you sure you want to permanently delete this order?")) {
+                                          await deleteOrder(selectedOrder.id);
+                                          setSelectedOrder(null);
+                                          loadData();
+                                        }
+                                      }}
+                                      className="px-4 py-2 bg-red-50 hover:bg-red-100 dark:bg-red-950/20 dark:hover:bg-red-950/40 text-red-600 dark:text-red-400 font-black text-xs rounded-xl flex items-center gap-1.5 cursor-pointer transition border border-red-200 dark:border-red-900/50"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                      <span>{isAr ? "مسح وإلغاء" : "Delete Order"}</span>
+                                    </button>
+                                  </div>
+                                </>
+                              )}
 
                             </div>
                           ) : (
@@ -1082,6 +1474,165 @@ export default function AdminPanel({
                       </button>
                     </div>
                   </form>
+                )}
+
+                {/* TAB 4: COMPREHENSIVE REVIEWS/RATINGS MANAGER */}
+                {activeTab === "reviews" && (
+                  <div className="space-y-6 text-start">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-extrabold text-lg text-zinc-900 dark:text-white">
+                          {isAr ? "آراء العملاء والتقييمات المسجلة ⭐" : "Customer Feedbacks Log ⭐"}
+                        </h3>
+                        <p className="text-xs text-zinc-400 font-medium mt-0.5">
+                          {isAr ? "استعرض وعدّل أو امسح آراء وتقييمات عملائك للمحافظة على المصداقية والشفافية." : "Review, update or delete client evaluations."}
+                        </p>
+                      </div>
+                    </div>
+
+                    {isEditingReview && selectedReviewIdx !== null ? (
+                      <form 
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          const updated = ratings.map((r, i) => i === selectedReviewIdx ? { ...r, name: reviewEditForm.name, score: reviewEditForm.score, comment: reviewEditForm.comment } : r);
+                          onRatingsUpdate(updated);
+                          setIsEditingReview(false);
+                          setSelectedReviewIdx(null);
+                        }}
+                        className="bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 p-5 rounded-2xl space-y-4"
+                      >
+                        <h4 className="font-extrabold text-sm text-emerald-600 flex items-center gap-1.5 border-b border-zinc-100 dark:border-zinc-900 pb-2">
+                          <span>{isAr ? "تعديل تفاصيل تقييم العميل ✍️" : "Update Feedback Entry ✍️"}</span>
+                        </h4>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs font-bold text-zinc-400 mb-1">{isAr ? "اسم العميل" : "Client Name"}</label>
+                            <input 
+                              type="text"
+                              required
+                              value={reviewEditForm.name}
+                              onChange={(e) => setReviewEditForm({ ...reviewEditForm, name: e.target.value })}
+                              className="w-full text-xs px-3.5 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold text-zinc-400 mb-1">{isAr ? "التقييم بالنجوم" : "Stars Rating Score"}</label>
+                            <div className="flex gap-1 pt-1.5">
+                              {[1, 2, 3, 4, 5].map((sc) => (
+                                <button
+                                  key={sc}
+                                  type="button"
+                                  onClick={() => setReviewEditForm({ ...reviewEditForm, score: sc })}
+                                  className="cursor-pointer"
+                                >
+                                  <Star className={`w-5 h-5 ${sc <= reviewEditForm.score ? "fill-yellow-400 text-yellow-400" : "text-zinc-300 dark:text-zinc-750"}`} />
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-zinc-400 mb-1">{isAr ? "التعليق المكتوب" : "Written Comment"}</label>
+                          <textarea 
+                            required
+                            rows={3}
+                            value={reviewEditForm.comment}
+                            onChange={(e) => setReviewEditForm({ ...reviewEditForm, comment: e.target.value })}
+                            className="w-full text-xs px-3.5 py-2.5 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                        </div>
+
+                        <div className="flex gap-2.5 pt-2 justify-end">
+                          <button
+                            type="button"
+                            onClick={() => { setIsEditingReview(false); setSelectedReviewIdx(null); }}
+                            className="px-4 py-2 bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold text-xs rounded-xl"
+                          >
+                            {isAr ? "إلغاء وعودة" : "Cancel"}
+                          </button>
+                          <button
+                            type="submit"
+                            className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow cursor-pointer"
+                          >
+                            {isAr ? "حفظ مراجعة العميل 💾" : "Save Changes 💾"}
+                          </button>
+                        </div>
+                      </form>
+                    ) : null}
+
+                    {ratings.length === 0 ? (
+                      <div className="p-12 text-center text-zinc-400 dark:text-zinc-500 bg-white dark:bg-zinc-900/40 border border-zinc-200 dark:border-zinc-800/80 rounded-2xl flex flex-col items-center justify-center gap-3">
+                        <span className="text-4xl">⭐</span>
+                        <p className="text-xs font-extrabold">{isAr ? "لا يوجد تقييمات أو آراء مسجلة في المتجر حتى الآن." : "No client feedback messages logged yet."}</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {ratings.map((r, idx) => (
+                          <div 
+                            key={idx}
+                            className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-4 rounded-2xl flex flex-col justify-between gap-3 shadow-sm hover:shadow-md transition duration-300 hover:border-emerald-550"
+                          >
+                            <div>
+                              <div className="flex items-center justify-between text-xs mb-1.5">
+                                <span className="font-extrabold text-zinc-800 dark:text-zinc-200">{r.name || (isAr ? "زائر مجهول" : "Anonymous Guest")}</span>
+                                <span className="text-[10px] text-zinc-400">{r.date ? r.date.split("T")[0] : ""}</span>
+                              </div>
+
+                              <div className="flex gap-0.5 mb-2">
+                                {Array.from({ length: 5 }).map((_, stIdx) => (
+                                  <Star 
+                                    key={stIdx} 
+                                    className={`w-3.5 h-3.5 ${stIdx < r.score ? "fill-yellow-400 text-yellow-400" : "text-zinc-200 dark:text-zinc-800"}`} 
+                                  />
+                                ))}
+                              </div>
+
+                              <p className="text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed font-semibold italic bg-zinc-50 dark:bg-zinc-950 p-2.5 rounded-xl border border-zinc-150 dark:border-zinc-800">
+                                "{r.comment}"
+                              </p>
+                            </div>
+
+                            <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800/60 flex items-center justify-end gap-1.5 text-xs font-semibold">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedReviewIdx(idx);
+                                  setReviewEditForm({
+                                    name: r.name || "",
+                                    score: r.score || 5,
+                                    comment: r.comment || ""
+                                  });
+                                  setIsEditingReview(true);
+                                }}
+                                className="px-3 py-1.5 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-850 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-lg flex items-center gap-1 cursor-pointer transition border border-zinc-200 dark:border-zinc-750"
+                              >
+                                <Edit3 className="w-3 h-3 text-emerald-555" />
+                                <span>{isAr ? "تعديل" : "Edit"}</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (window.confirm(isAr ? "هل أنت متأكد من حذف هذا التقييم نهائياً؟" : "Are you sure you want to delete this rating?")) {
+                                    const updated = ratings.filter((_, i) => i !== idx);
+                                    onRatingsUpdate(updated);
+                                  }
+                                }}
+                                className="px-3 py-1.5 bg-red-50 hover:bg-red-100 dark:bg-red-955/20 dark:hover:bg-red-955/40 text-red-650 dark:text-red-400 rounded-lg flex items-center gap-1 cursor-pointer transition border border-red-100 dark:border-red-900/50"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                <span>{isAr ? "حذف" : "Delete"}</span>
+                              </button>
+                            </div>
+
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
 

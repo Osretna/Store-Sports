@@ -1,5 +1,5 @@
-import React from "react";
-import { ShoppingBag, Star, Zap } from "lucide-react";
+import React, { useState } from "react";
+import { ShoppingBag, Star, Zap, ChevronLeft, ChevronRight } from "lucide-react";
 import { Product } from "../types";
 
 interface ProductCardProps {
@@ -29,6 +29,10 @@ export default function ProductCard({ product, onAddToCart, onDirectBuy, languag
     }
   }[language];
 
+  // Resolve image list: if images is defined and has elements, use it, else fallback to single image
+  const imagesList = product.images && product.images.length > 0 ? product.images : [product.image || ""];
+  const [currentImgIndex, setCurrentImgIndex] = useState(0);
+
   // Render yellow/gray stars
   const stars = Array.from({ length: 5 }, (_, i) => {
     const starVal = i + 1;
@@ -53,15 +57,55 @@ export default function ProductCard({ product, onAddToCart, onDirectBuy, languag
         {category}
       </span>
 
-      {/* Image container with zoom hover */}
-      <div className="relative w-full aspect-video bg-zinc-100 dark:bg-zinc-950 overflow-hidden">
+      {/* Image container with zoom hover *******************/}
+      <div className="relative w-full aspect-video bg-zinc-100 dark:bg-zinc-950 overflow-hidden group/img">
         <img
-          src={product.image}
+          src={imagesList[currentImgIndex]}
           alt={name}
           referrerPolicy="no-referrer"
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-zinc-900/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+
+        {/* Carousel controls if more than 1 image is present */}
+        {imagesList.length > 1 && (
+          <>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setCurrentImgIndex((prev) => (prev === 0 ? imagesList.length - 1 : prev - 1));
+              }}
+              className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 bg-black/60 hover:bg-black/80 text-white rounded-full flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity duration-200 z-10 border border-white/20 cursor-pointer"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setCurrentImgIndex((prev) => (prev === imagesList.length - 1 ? 0 : prev + 1));
+              }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 bg-black/60 hover:bg-black/80 text-white rounded-full flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity duration-200 z-10 border border-white/20 cursor-pointer"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+
+            {/* Pagination dots indicator */}
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1 z-10">
+              {imagesList.map((_, idx) => (
+                <button
+                  key={idx}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCurrentImgIndex(idx);
+                  }}
+                  className={`w-1.5 h-1.5 rounded-full transition-all cursor-pointer ${
+                    idx === currentImgIndex ? "bg-white scale-125" : "bg-white/50 hover:bg-white"
+                  }`}
+                />
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Details body */}
