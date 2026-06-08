@@ -15,8 +15,8 @@ interface AdminPanelProps {
   settings: StoreSettings;
   onSettingsUpdate: (settings: StoreSettings) => void;
   onProductsUpdate: () => void;
-  ratings?: { name: string; score: number; comment: string; date: string }[];
-  onRatingsUpdate?: (updated: { name: string; score: number; comment: string; date: string }[]) => void;
+  ratings?: { id?: string; name: string; score: number; comment: string; date: string }[];
+  onRatingsUpdate?: (updated: { id?: string; name: string; score: number; comment: string; date: string }[]) => void;
 }
 
 export default function AdminPanel({

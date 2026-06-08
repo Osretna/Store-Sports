@@ -369,3 +369,89 @@ export async function saveStoreSettings(settings: any): Promise<void> {
     }
   }
 }
+
+// ============================================================================
+// DURABLE CLOUD RATINGS & TESTIMONIAL SYSTEM / نظام تقييمات العملاء السحابي
+// ============================================================================
+
+const DEFAULT_RATINGS = [
+  { id: "r1", name: "أحمد منصور", score: 5, comment: "الأثقال ممتازة وسرعة التوصيل خيالية، شكراً لكم على الاحترافية.", date: "2026-06-01" },
+  { id: "r2", name: "John Doe", score: 5, comment: "Extremely professional sports mat! Easy delivery coordination.", date: "2026-06-03" },
+  { id: "r3", name: "سارة العتيبي", score: 4, comment: "الحذاء خفيف الوزن ومناسب للتمرين، التقييم 4 نجوم.", date: "2026-06-05" }
+];
+
+if (!localGet("store_user_ratings")) {
+  localSet("store_user_ratings", DEFAULT_RATINGS);
+}
+
+export async function getDbRatings(): Promise<any[]> {
+  if (isFirebaseActive && db) {
+    try {
+      const fetchPromise = (async () => {
+        const snap = await getDocs(collection(db, "ratings"));
+        const list: any[] = [];
+        snap.forEach((docSnap) => {
+          list.push({ id: docSnap.id, ...docSnap.data() });
+        });
+        return list;
+      })();
+
+      const list = await withTimeout(fetchPromise, 1500, null);
+      if (list) {
+        list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        localSet("store_user_ratings", list);
+        return list;
+      }
+    } catch (e) {
+      if (isPermissionError(e)) {
+        handleFirestoreError(e, OperationType.LIST, "ratings");
+      } else {
+        console.warn("Firestore error fetching ratings, using local cache:", e);
+      }
+    }
+  }
+  const cached = localGet("store_user_ratings");
+  return cached && cached.length > 0 ? cached : DEFAULT_RATINGS;
+}
+
+export async function addDbRating(rating: any): Promise<void> {
+  const local = localGet("store_user_ratings") || DEFAULT_RATINGS;
+  const existsIdx = local.findIndex((r: any) => r.id === rating.id);
+  if (existsIdx > -1) {
+    local[existsIdx] = rating;
+  } else {
+    local.unshift(rating);
+  }
+  localSet("store_user_ratings", local);
+
+  if (isFirebaseActive && db) {
+    try {
+      await withTimeout(setDoc(doc(db, "ratings", rating.id), rating), 1500, null);
+    } catch (e) {
+      if (isPermissionError(e)) {
+        handleFirestoreError(e, OperationType.WRITE, `ratings/${rating.id}`);
+      } else {
+        console.error("Firestore error saving rating:", e);
+      }
+    }
+  }
+}
+
+export async function deleteDbRating(id: string): Promise<void> {
+  const local = localGet("store_user_ratings") || DEFAULT_RATINGS;
+  const filtered = local.filter((r: any) => r.id !== id);
+  localSet("store_user_ratings", filtered);
+
+  if (isFirebaseActive && db) {
+    try {
+      await withTimeout(deleteDoc(doc(db, "ratings", id)), 1500, null);
+    } catch (e) {
+      if (isPermissionError(e)) {
+        handleFirestoreError(e, OperationType.DELETE, `ratings/${id}`);
+      } else {
+        console.error("Firestore error deleting rating:", e);
+      }
+    }
+  }
+}
+

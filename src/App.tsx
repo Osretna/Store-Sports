@@ -5,7 +5,7 @@ import {
   Briefcase, Award, Zap, Heart, MessageSquare, Plus, Minus, Trash2, X
 } from "lucide-react";
 import { Product, CartItem, Order, StoreSettings } from "./types";
-import { getProducts, getStoreSettings, addOrder, getOrders } from "./firebase";
+import { getProducts, getStoreSettings, addOrder, getOrders, getDbRatings, addDbRating, deleteDbRating } from "./firebase";
 import { Smartphone, Truck, ShieldAlert, Navigation, Clock, PackageCheck } from "lucide-react";
 import Header from "./components/Header";
 import ProductCard from "./components/ProductCard";
@@ -113,14 +113,16 @@ export default function App() {
   });
 
   // Interactive Testimonial Ratings
-  const [ratings, setRatings] = useState<{ name: string; score: number; comment: string; date: string }[]>(() => {
+  const [ratings, setRatings] = useState<{ id?: string; name: string; score: number; comment: string; date: string }[]>(() => {
     const saved = localStorage.getItem("store_user_ratings");
     return saved ? JSON.parse(saved) : [
-      { name: "أحمد منصور", score: 5, comment: "الأثقال ممتازة وسرعة التوصيل خيالية، شكراً لكم على الاحترافية.", date: "2026-06-01" },
-      { name: "John Doe", score: 5, comment: "Extremely professional sports mat! Easy delivery coordination.", date: "2026-06-03" },
-      { name: "سارة العتيبي", score: 4, comment: "الحذاء خفيف الوزن ومناسب للتمرين، التقييم 4 نجوم.", date: "2026-06-05" }
+      { id: "r1", name: "أحمد منصور", score: 5, comment: "الأثقال ممتازة وسرعة التوصيل خيالية، شكراً لكم على الاحترافية.", date: "2026-06-01" },
+      { id: "r2", name: "John Doe", score: 5, comment: "Extremely professional sports mat! Easy delivery coordination.", date: "2026-06-03" },
+      { id: "r3", name: "سارة العتيبي", score: 4, comment: "الحذاء خفيف الوزن ومناسب للتمرين، التقييم 4 نجوم.", date: "2026-06-05" }
     ];
   });
+
+  const [showRatingSuccessToast, setShowRatingSuccessToast] = useState(false);
 
   const [newSurveyRating, setNewSurveyRating] = useState({
     name: "",
@@ -214,6 +216,8 @@ export default function App() {
       setProducts(activeProducts);
       const activeOrders = await getOrders();
       setOrders(activeOrders);
+      const activeRatings = await getDbRatings();
+      setRatings(activeRatings);
     } catch (e) {
       console.error("Critical: Could not retrieve database items", e);
     } finally {
@@ -468,27 +472,37 @@ export default function App() {
   };
 
   // Submit survey rating testimonial
-  const submitSurveyRating = (e: React.FormEvent) => {
+  const submitSurveyRating = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSurveyRating.comment.trim() || !newSurveyRating.name.trim()) return;
 
     const testimonial = {
+      id: "rate_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
       name: newSurveyRating.name.trim(),
       score: newSurveyRating.score,
       comment: newSurveyRating.comment.trim(),
       date: new Date().toISOString().split("T")[0]
     };
 
-    setRatings((prev) => {
-      const updated = [testimonial, ...prev];
-      localStorage.setItem("store_user_ratings", JSON.stringify(updated));
-      return updated;
-    });
+    try {
+      // 1. Update state immediately for zero-latency UI feedback
+      setRatings((prev) => [testimonial, ...prev]);
+
+      // 2. Persist in online Cloud Firestore and offline LocalStorage
+      await addDbRating(testimonial);
+    } catch (err) {
+      console.error("Failed to persist premium rating:", err);
+    }
 
     // Reset survey rating state
     setNewSurveyRating({ name: "", score: 5, comment: "" });
     setShowRatingModal(false);
-    alert(t.ratingSuccess);
+
+    // Trigger feedback success toast
+    setShowRatingSuccessToast(true);
+    setTimeout(() => {
+      setShowRatingSuccessToast(false);
+    }, 4500);
   };
 
   // Query Firestore collection to instantly trace real-time order status
@@ -1444,6 +1458,16 @@ export default function App() {
         />
       )}
 
+      {showRatingSuccessToast && (
+        <div 
+          id="rating-success-toast"
+          className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 dark:bg-emerald-550 text-white font-extrabold text-xs sm:text-sm px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 border border-emerald-500/30 animate-bounce duration-1000 max-w-sm text-center"
+        >
+          <CheckCircle className="w-5 h-5 shrink-0 fill-white text-emerald-600 dark:text-emerald-550" />
+          <span>{t.ratingSuccess}</span>
+        </div>
+      )}
+
       {/* RATING TESTIMONIAL SURVEY SUBMIT MODAL */}
       {showRatingModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -1527,9 +1551,33 @@ export default function App() {
           onSettingsUpdate={(updatedSettings) => setSettings(updatedSettings)}
           onProductsUpdate={() => { fetchStoreDocuments(); }}
           ratings={ratings}
-          onRatingsUpdate={(updatedRatings) => {
+          onRatingsUpdate={async (updatedRatings) => {
             setRatings(updatedRatings);
             localStorage.setItem("store_user_ratings", JSON.stringify(updatedRatings));
+
+            try {
+              // Get current live ratings from DB
+              const oldDbRatings = await getDbRatings();
+
+              // Delete any ratings that were removed by the Admin
+              const updatedIds = updatedRatings.map((r: any) => r.id).filter(Boolean);
+              for (const oldR of oldDbRatings) {
+                if (oldR.id && !updatedIds.includes(oldR.id)) {
+                  await deleteDbRating(oldR.id);
+                }
+              }
+
+              // Save or update remaining ratings
+              for (const newR of updatedRatings) {
+                const checkedRecord = {
+                  ...newR,
+                  id: newR.id || "rate_" + Date.now() + "_" + Math.floor(Math.random() * 1000)
+                };
+                await addDbRating(checkedRecord);
+              }
+            } catch (err) {
+              console.error("Failed to sync rating modifications with database:", err);
+            }
           }}
         />
       )}
