@@ -1671,7 +1671,7 @@ export default function App() {
                         className="h-full bg-emerald-500 transition-all duration-700 rounded-full" 
                         style={{
                           width: `${
-                            trackedOrder.status === "delivered" ? 100 :
+                            (trackedOrder.status === "delivered" || trackedOrder.status === "completed") ? 100 :
                             trackedOrder.status === "shipped" ? 66 :
                             trackedOrder.status === "processing" ? 33 : 0
                           }%`
@@ -1690,7 +1690,7 @@ export default function App() {
 
                     {/* Step 2: Processing */}
                     {(() => {
-                      const isActive = ["processing", "shipped", "delivered"].includes(trackedOrder.status);
+                      const isActive = ["processing", "shipped", "delivered", "completed"].includes(trackedOrder.status);
                       return (
                         <div className="flex flex-col items-center text-center relative z-10 w-full">
                           <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold shadow-md transition ${
@@ -1708,7 +1708,7 @@ export default function App() {
 
                     {/* Step 3: Shipped */}
                     {(() => {
-                      const isActive = ["shipped", "delivered"].includes(trackedOrder.status);
+                      const isActive = ["shipped", "delivered", "completed"].includes(trackedOrder.status);
                       return (
                         <div className="flex flex-col items-center text-center relative z-10">
                           <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold shadow-md transition ${
@@ -1726,7 +1726,7 @@ export default function App() {
 
                     {/* Step 4: Delivered */}
                     {(() => {
-                      const isActive = trackedOrder.status === "delivered";
+                      const isActive = ["delivered", "completed"].includes(trackedOrder.status);
                       return (
                         <div className="flex flex-col items-center text-center relative z-10">
                           <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold shadow-md transition ${

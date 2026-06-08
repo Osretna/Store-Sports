@@ -550,6 +550,52 @@ export default function AdminPanel({
     }
   };
 
+  // Update order status in database specifically (for dropdown status steps)
+  const changeOrderStatus = async (order: Order, newStatus: string) => {
+    const updated = { ...order, status: newStatus };
+    await updateOrder(updated);
+    
+    // Update active visual list
+    setOrders(prev => prev.map(o => o.id === order.id ? updated : o));
+    if (selectedOrder && selectedOrder.id === order.id) {
+      setSelectedOrder(updated);
+    }
+  };
+
+  const getStatusBadgeInfo = (status: string) => {
+    switch (status) {
+      case "processing":
+        return {
+          bg: "bg-blue-100 dark:bg-blue-950/40 text-blue-800 dark:text-blue-400 border border-blue-200/50 dark:border-blue-800/30",
+          labelAr: "قيد التجهيز 📦",
+          labelEn: "Preparing 📦",
+          icon: <Clock className="w-3 h-3" />
+        };
+      case "shipped":
+        return {
+          bg: "bg-indigo-100 dark:bg-indigo-950/40 text-indigo-800 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-800/30",
+          labelAr: "جاري الشحن مع المندوب 🚚",
+          labelEn: "Shipped with Driver 🚚",
+          icon: <Clock className="w-3 h-3 animate-pulse" />
+        };
+      case "delivered":
+      case "completed":
+        return {
+          bg: "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/30",
+          labelAr: "تم التسليم عملية مكتملة ✅",
+          labelEn: "Delivered ✅",
+          icon: <Check className="w-3 h-3" />
+        };
+      default: // "pending"
+        return {
+          bg: "bg-amber-100 dark:bg-amber-955/40 text-amber-800 dark:text-amber-400 border border-amber-200/50 dark:border-amber-800/30",
+          labelAr: "قيد الانتظار ⌛",
+          labelEn: "Pending ⌛",
+          icon: <Clock className="w-3 h-3" />
+        };
+    }
+  };
+
   // Trigger Save Store settings
   const handleSaveGlobalSettings = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1140,23 +1186,15 @@ export default function AdminPanel({
                                 <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">
                                   #{o.id.substring(0, 8)}...
                                 </span>
-                                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 ${
-                                  o.status === "completed"
-                                    ? "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-400"
-                                    : "bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-400"
-                                }`}>
-                                  {o.status === "completed" ? (
-                                    <>
-                                      <Check className="w-3 h-3" />
-                                      {t.orders.completed}
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Clock className="w-3 h-3" />
-                                      {t.orders.pending}
-                                    </>
-                                  )}
-                                </span>
+                                {(() => {
+                                  const badge = getStatusBadgeInfo(o.status || "pending");
+                                  return (
+                                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1 ${badge.bg}`}>
+                                      {badge.icon}
+                                      <span>{isAr ? badge.labelAr : badge.labelEn}</span>
+                                    </span>
+                                  );
+                                })()}
                               </div>
 
                               <div className="text-sm font-bold text-zinc-800 dark:text-zinc-100 truncate mb-0.5">
@@ -1269,20 +1307,21 @@ export default function AdminPanel({
                                       <p className="text-xs text-zinc-400 font-medium">#{selectedOrder.id}</p>
                                     </div>
 
-                                    <div className="flex gap-1.5">
-                                      <button
-                                        onClick={() => toggleOrderStatus(selectedOrder)}
-                                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer transition ${
-                                          selectedOrder.status === "completed"
-                                            ? "bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300"
-                                            : "bg-emerald-600 hover:bg-emerald-700 text-white"
-                                        }`}
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-zinc-400 font-extrabold text-[10px] uppercase tracking-wider block">
+                                        {isAr ? "تحديث حالة التتبع 🚚:" : "Tracking Stage 🚚:"}
+                                      </span>
+                                      <select
+                                        id="order-status-dropdown-select"
+                                        value={selectedOrder.status || "pending"}
+                                        onChange={(e) => changeOrderStatus(selectedOrder, e.target.value)}
+                                        className="px-3.5 py-1.5 text-xs font-extrabold rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer shadow-sm"
                                       >
-                                        <Check className="w-3.5 h-3.5" />
-                                        <span>
-                                          {selectedOrder.status === "completed" ? t.orders.setPending : t.orders.setCompleted}
-                                        </span>
-                                      </button>
+                                        <option value="pending">{isAr ? "قيد الانتظار ⌛" : "Pending ⌛"}</option>
+                                        <option value="processing">{isAr ? "قيد التجهيز 📦" : "Preparing 📦"}</option>
+                                        <option value="shipped">{isAr ? "جاري الشحن مع المندوب 🚚" : "With Driver 🚚"}</option>
+                                        <option value="delivered">{isAr ? "تم التسليم عملية مكتملة ✅" : "Delivered ✅"}</option>
+                                      </select>
                                     </div>
                                   </div>
 
