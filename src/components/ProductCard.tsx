@@ -7,10 +7,11 @@ interface ProductCardProps {
   product: Product;
   onAddToCart: (p: Product) => void;
   onDirectBuy: (p: Product) => void;
+  onSelect?: (p: Product) => void;
   language: "ar" | "en";
 }
 
-export default function ProductCard({ product, onAddToCart, onDirectBuy, language }: ProductCardProps) {
+export default function ProductCard({ product, onAddToCart, onDirectBuy, onSelect, language }: ProductCardProps) {
   const isAr = language === "ar";
   const name = isAr ? product.nameAr : product.nameEn;
   const desc = isAr ? product.descriptionAr : product.descriptionEn;
@@ -58,7 +59,10 @@ export default function ProductCard({ product, onAddToCart, onDirectBuy, languag
       </span>
 
       {/* Image container with zoom hover *******************/}
-      <div className="relative w-full aspect-video bg-zinc-100 dark:bg-zinc-950 overflow-hidden group/img">
+      <div 
+        onClick={() => onSelect?.(product)}
+        className="relative w-full aspect-video bg-zinc-100 dark:bg-zinc-950 overflow-hidden group/img cursor-pointer"
+      >
         <img
           src={imagesList[currentImgIndex]}
           alt={name}
@@ -110,18 +114,23 @@ export default function ProductCard({ product, onAddToCart, onDirectBuy, languag
 
       {/* Details body */}
       <div className="p-4 flex flex-col flex-1">
-        <div className="flex items-center gap-1 mb-2">
-          <div className="flex">{stars}</div>
-          <span className="text-xs text-zinc-400 font-medium">({product.ratingCount || 10})</span>
+        <div 
+          onClick={() => onSelect?.(product)}
+          className="cursor-pointer flex flex-col flex-1 group"
+        >
+          <div className="flex items-center gap-1 mb-2">
+            <div className="flex">{stars}</div>
+            <span className="text-xs text-zinc-400 font-medium">({product.ratingCount || 10})</span>
+          </div>
+
+          <h3 className="text-base font-bold text-zinc-800 dark:text-zinc-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors line-clamp-1 mb-1">
+            {name}
+          </h3>
+
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-2 mb-4 leading-relaxed flex-1">
+            {desc}
+          </p>
         </div>
-
-        <h3 className="text-base font-bold text-zinc-800 dark:text-zinc-100 line-clamp-1 mb-1">
-          {name}
-        </h3>
-
-        <p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-2 mb-4 leading-relaxed flex-1">
-          {desc}
-        </p>
 
         {/* Pricing + Action row */}
         <div className="mt-auto pt-4 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between">

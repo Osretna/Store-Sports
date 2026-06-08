@@ -11,6 +11,7 @@ import Header from "./components/Header";
 import ProductCard from "./components/ProductCard";
 import AdminPanel from "./components/AdminPanel";
 import MapPicker from "./components/MapPicker";
+import ProductDetailsModal from "./components/ProductDetailsModal";
 
 export default function App() {
   // Locale & Theme choices cached in localStorage
@@ -59,6 +60,7 @@ export default function App() {
   const [showRatingModal, setShowRatingModal] = useState<boolean>(() => {
     return localStorage.getItem("store_show_rating_modal") === "true";
   });
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [recentOrderId, setRecentOrderId] = useState<string>(() => {
     return localStorage.getItem("store_recent_order_id") || "";
   });
@@ -323,17 +325,17 @@ export default function App() {
   }[language];
 
   // Cart operations
-  const handleAddToCart = (product: Product) => {
+  const handleAddToCart = (product: Product, quantity: number = 1) => {
     setCart((prev) => {
       const existing = prev.find((item) => item.product.id === product.id);
       if (existing) {
         return prev.map((item) =>
           item.product.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
+            ? { ...item, quantity: item.quantity + quantity }
             : item
         );
       }
-      return [...prev, { product, quantity: 1 }];
+      return [...prev, { product, quantity }];
     });
     // Open cart drawer for delightful UI response
     setShowCart(true);
@@ -358,9 +360,9 @@ export default function App() {
   };
 
   // Direct checkout trigger
-  const handleDirectBuy = (product: Product) => {
+  const handleDirectBuy = (product: Product, quantity: number = 1) => {
     // Overwrite cart with single item for instant buy layout
-    setCart([{ product, quantity: 1 }]);
+    setCart([{ product, quantity }]);
     setShowCheckout(true);
   };
 
@@ -1079,6 +1081,7 @@ export default function App() {
                   product={p}
                   onAddToCart={handleAddToCart}
                   onDirectBuy={handleDirectBuy}
+                  onSelect={setSelectedProduct}
                   language={language}
                 />
               ))}
@@ -1423,6 +1426,18 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {selectedProduct && (
+        <ProductDetailsModal
+          product={selectedProduct}
+          allProducts={products}
+          onClose={() => setSelectedProduct(null)}
+          onAddToCart={handleAddToCart}
+          onDirectBuy={handleDirectBuy}
+          onSelectProduct={setSelectedProduct}
+          language={language}
+        />
       )}
 
       {/* RATING TESTIMONIAL SURVEY SUBMIT MODAL */}
