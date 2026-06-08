@@ -281,6 +281,8 @@ export default function App() {
       orderSuccessTip: "تم فتح نافذة إرسال الفاتورة عبر واتساب للأدمن لمباشرة تجهيز وتغليف طلبك فوراً.",
       rateBtn: "تقييم المتجر والأدوات",
       rateTitle: "شاركنا رأيك وتقييمك للمتجر الرياضي!",
+      ratingNameLabel: "اسم العميل الكابتن",
+      ratingNamePlaceholder: "اكتب اسمك للمراجعة...",
       ratePlaceholder: "كود مراجعة أو رأيك الشخصي جودة أدواتنا الرياضية...",
       submitRating: "إرسال التقييم للعامة",
       latestRatings: "تقييمات وآراء أبطال وبطلات وصُنّاع اللياقة",
@@ -315,6 +317,8 @@ export default function App() {
       orderSuccessTip: "Your WhatsApp receipt launcher is now open to trigger custom delivery dispatcher processes immediately.",
       rateBtn: "Rate Our Equipment Mat",
       rateTitle: "Rate your premium Sports Arena experience!",
+      ratingNameLabel: "Your Champ Name",
+      ratingNamePlaceholder: "Enter your full name...",
       ratePlaceholder: "What is your opinion about our workout tools...",
       submitRating: "Submit Public Testimonial",
       latestRatings: "Community Champions Voice & Testimonials",
@@ -1474,6 +1478,15 @@ export default function App() {
                   </button>
                 ))}
               </div>
+
+              <input
+                type="text"
+                required
+                placeholder={t.ratingNamePlaceholder}
+                value={newSurveyRating.name}
+                onChange={(e) => setNewSurveyRating({ ...newSurveyRating, name: e.target.value })}
+                className="w-full text-xs px-3.5 py-2.5 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-white outline-none focus:ring-2 focus:ring-emerald-500 text-start"
+              />
 
               <textarea
                 required
